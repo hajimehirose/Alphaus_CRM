@@ -1,13 +1,13 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
+
+export const dynamic = 'force-dynamic'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -98,4 +98,3 @@ export default function LoginPage() {
     </div>
   )
 }
-

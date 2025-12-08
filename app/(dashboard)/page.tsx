@@ -1,8 +1,8 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
 import { useState, useEffect } from 'react'
+
+export const dynamic = 'force-dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

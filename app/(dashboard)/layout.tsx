@@ -1,8 +1,8 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+
+export const dynamic = 'force-dynamic'
 import Header from '@/components/layout/Header'
 
 export default function DashboardLayout({
