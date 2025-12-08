@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Header from '@/components/layout/Header'
 
