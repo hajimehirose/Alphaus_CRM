@@ -38,7 +38,7 @@ export async function hasPermission(
     return false
   }
 
-  return Array.isArray(allowedActions) && allowedActions.includes(role)
+  return Array.isArray(allowedActions) && (allowedActions as readonly UserRole[]).includes(role)
 }
 
 export function canPerformAction(role: UserRole | null, action: string, resource: keyof typeof PERMISSIONS): boolean {
@@ -56,6 +56,6 @@ export function canPerformAction(role: UserRole | null, action: string, resource
     return false
   }
 
-  return Array.isArray(allowedActions) && allowedActions.includes(role)
+  return Array.isArray(allowedActions) && (allowedActions as readonly UserRole[]).includes(role)
 }
 
