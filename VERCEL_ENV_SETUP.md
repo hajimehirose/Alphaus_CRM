@@ -1,5 +1,11 @@
 # Vercel Environment Variables Setup
 
+## 🚨 Quick Check
+
+Visit `/api/health` on your production site to check if environment variables are set:
+- Production URL: `https://your-site.vercel.app/api/health`
+- This will tell you exactly which variables are missing
+
 ## Required Environment Variables
 
 Add these environment variables in your Vercel project settings:
