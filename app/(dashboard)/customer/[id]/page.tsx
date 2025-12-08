@@ -450,7 +450,20 @@ export default function CustomerDetailPage() {
             <DialogTitle>Edit Customer</DialogTitle>
           </DialogHeader>
           <CustomerForm
-            customer={customer}
+            customer={{
+              ...customer,
+              priority: customer.priority ?? undefined,
+              name_jp: customer.name_jp ?? undefined,
+              company_site: customer.company_site ?? undefined,
+              tier: customer.tier ?? undefined,
+              cloud_usage: customer.cloud_usage ?? undefined,
+              ripple_customer: customer.ripple_customer ?? undefined,
+              archera_customer: customer.archera_customer ?? undefined,
+              pic: customer.pic ?? undefined,
+              exec: customer.exec ?? undefined,
+              alphaus_rep: customer.alphaus_rep ?? undefined,
+              alphaus_exec: customer.alphaus_exec ?? undefined,
+            }}
             onSubmit={handleUpdateCustomer}
             onCancel={() => setShowEditDialog(false)}
           />
