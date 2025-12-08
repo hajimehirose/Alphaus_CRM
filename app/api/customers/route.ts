@@ -4,16 +4,42 @@ import { NextResponse } from 'next/server'
 import { STAGE_PROBABILITIES } from '@/lib/constants'
 import { logActivity } from '@/lib/activity-log'
 
+// Force dynamic rendering to prevent static optimization issues
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
+    let supabase
+    try {
+      supabase = await createClient()
+    } catch (clientError: any) {
+      console.error('Failed to create Supabase client:', clientError)
+      return NextResponse.json({ 
+        error: 'Configuration error',
+        message: clientError.message || 'Failed to initialize database connection. Please check environment variables.',
+        details: 'Check Vercel environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY'
+      }, { status: 500 })
+    }
+
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = await getUserRole(user.id)
+    let role
+    try {
+      role = await getUserRole(user.id)
+    } catch (roleError: any) {
+      console.error('Failed to get user role:', roleError)
+      return NextResponse.json({ 
+        error: 'Database error',
+        message: 'Failed to retrieve user role. Please check database connection.',
+        details: roleError.message
+      }, { status: 500 })
+    }
+
     if (!role) {
       return NextResponse.json({ 
         error: 'Role not found',
@@ -81,12 +107,26 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     console.error('Error in /api/customers GET:', error)
+    console.error('Error stack:', error.stack)
+    
+    // Ensure we always return JSON, never HTML
+    const errorMessage = error.message || 'Internal server error'
+    const errorDetails = error.message?.includes('Missing') 
+      ? 'Please configure Supabase environment variables in Vercel project settings'
+      : error.stack?.substring(0, 200)
+    
     return NextResponse.json(
       { 
-        error: error.message || 'Internal server error',
-        details: error.message?.includes('Missing') ? 'Please configure Supabase environment variables in Vercel project settings' : undefined
+        error: errorMessage,
+        details: errorDetails,
+        type: 'api_error'
       },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      }
     )
   }
 }

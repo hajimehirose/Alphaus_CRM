@@ -23,6 +23,7 @@ export default function ActivityLogPage() {
     entity_type: '',
     customer_id: '',
     user_id: '',
+    activityType: 'all', // all, updates, notes, files
   })
 
   useEffect(() => {
@@ -32,14 +33,23 @@ export default function ActivityLogPage() {
   const loadActivities = async () => {
     try {
       setLoading(true)
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: '50',
-      })
-      if (filters.action) params.set('action', filters.action)
-      if (filters.entity_type) params.set('entity_type', filters.entity_type)
-      if (filters.customer_id) params.set('customer_id', filters.customer_id)
-      if (filters.user_id) params.set('user_id', filters.user_id)
+        const params = new URLSearchParams({
+          page: page.toString(),
+          limit: '50',
+        })
+        if (filters.action) params.set('action', filters.action)
+        if (filters.entity_type) params.set('entity_type', filters.entity_type)
+        if (filters.customer_id) params.set('customer_id', filters.customer_id)
+        if (filters.user_id) params.set('user_id', filters.user_id)
+        
+        // Apply activity type filter
+        if (filters.activityType === 'updates') {
+          params.set('action', 'updated')
+        } else if (filters.activityType === 'notes') {
+          params.set('entity_type', 'note')
+        } else if (filters.activityType === 'files') {
+          params.set('entity_type', 'attachment')
+        }
 
       const res = await fetch(`/api/activity-logs?${params.toString()}`)
       if (res.ok) {
@@ -111,12 +121,43 @@ export default function ActivityLogPage() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-4 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Filters</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* Activity Type Quick Filters */}
+            <div className="flex gap-2 mb-4 pb-4 border-b">
+              <Button
+                variant={filters.activityType === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilters({ ...filters, activityType: 'all' })}
+              >
+                All
+              </Button>
+              <Button
+                variant={filters.activityType === 'updates' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilters({ ...filters, activityType: 'updates' })}
+              >
+                Updates
+              </Button>
+              <Button
+                variant={filters.activityType === 'notes' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilters({ ...filters, activityType: 'notes' })}
+              >
+                Notes
+              </Button>
+              <Button
+                variant={filters.activityType === 'files' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilters({ ...filters, activityType: 'files' })}
+              >
+                Files
+              </Button>
+            </div>
+            <div className="grid grid-cols-4 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Action</label>
               <Input

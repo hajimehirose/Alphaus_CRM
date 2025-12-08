@@ -7,7 +7,10 @@ export const dynamic = 'force-dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Plus, LayoutGrid, Table2, Columns, Edit2, Eye, Download } from 'lucide-react'
+import { Plus, LayoutGrid, Table2, Columns, Edit2, Eye, Download, Settings2, Filter, Trash2 as TrashIcon } from 'lucide-react'
+import ColumnConfigDialog from '@/components/customers/ColumnConfigDialog'
+import AdvancedFilters, { type FilterCondition } from '@/components/customers/AdvancedFilters'
+import { useUserSettings, type TableDensity } from '@/hooks/use-user-settings'
 import type { Customer } from '@/types/database'
 import CustomerForm from '@/components/customers/CustomerForm'
 import KanbanBoard from '@/components/customers/KanbanBoard'
@@ -23,6 +26,7 @@ export default function CustomersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const { settings, saveSetting } = useUserSettings()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('kanban')
@@ -30,6 +34,22 @@ export default function CustomersPage() {
   const searchQuery = searchParams.get('search') || ''
   const [filterPriority, setFilterPriority] = useState<string | null>(null)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showColumnConfig, setShowColumnConfig] = useState(false)
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [advancedFilters, setAdvancedFilters] = useState<FilterCondition[]>([])
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<number>>(new Set())
+
+  const density: TableDensity = (settings.density as TableDensity) || 'comfortable'
+
+  const handleDensityChange = async (newDensity: TableDensity) => {
+    const success = await saveSetting('density', newDensity)
+    if (success) {
+      toast({
+        title: 'Success',
+        description: `Table density changed to ${newDensity}`,
+      })
+    }
+  }
 
   useEffect(() => {
     loadCustomers()
@@ -43,6 +63,15 @@ export default function CustomersPage() {
       if (filterPriority) params.set('priority', filterPriority)
 
       const res = await fetch(`/api/customers?${params.toString()}`)
+      
+      // Check if response is JSON
+      const contentType = res.headers.get('content-type')
+      if (!contentType?.includes('application/json')) {
+        const text = await res.text()
+        console.error('Non-JSON response:', text.substring(0, 200))
+        throw new Error('Server returned HTML instead of JSON. Check if API route is working correctly.')
+      }
+      
       const data = await res.json()
       
       if (!res.ok) {
@@ -347,6 +376,28 @@ export default function CustomersPage() {
             <LayoutGrid className="h-4 w-4 mr-2" />
             Grid
           </Button>
+          {viewMode === 'table' && (
+            <>
+              <div className="h-6 w-px bg-gray-300 mx-2" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowColumnConfig(true)}
+              >
+                <Settings2 className="h-4 w-4 mr-2" />
+                Columns
+              </Button>
+              <select
+                value={density}
+                onChange={(e) => handleDensityChange(e.target.value as TableDensity)}
+                className="px-3 py-1.5 text-sm border rounded-md bg-background"
+              >
+                <option value="compact">Compact</option>
+                <option value="comfortable">Comfortable</option>
+                <option value="spacious">Spacious</option>
+              </select>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -376,14 +427,16 @@ export default function CustomersPage() {
           onDelete={handleDeleteCustomer}
           onNavigate={(id) => router.push(`/customer/${id}`)}
         />
-      ) : viewMode === 'table' ? (
-        <CustomerTable
-          customers={customers}
-          editMode={editMode === 'edit'}
-          onUpdate={handleUpdateCustomer}
-          onDelete={handleDeleteCustomer}
-          onNavigate={(id) => router.push(`/customer/${id}`)}
-        />
+        ) : viewMode === 'table' ? (
+          <CustomerTable
+            customers={customers}
+            editMode={editMode === 'edit'}
+            onUpdate={handleUpdateCustomer}
+            onDelete={handleDeleteCustomer}
+            onNavigate={(id) => router.push(`/customer/${id}`)}
+            selectedIds={selectedCustomerIds}
+            onSelectionChange={setSelectedCustomerIds}
+          />
       ) : (
         <CustomerGrid
           customers={customers}
@@ -405,6 +458,24 @@ export default function CustomersPage() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Column Configuration Dialog */}
+      <ColumnConfigDialog
+        open={showColumnConfig}
+        onOpenChange={setShowColumnConfig}
+      />
+
+      {/* Advanced Filters Dialog */}
+      <AdvancedFilters
+        open={showAdvancedFilters}
+        onOpenChange={setShowAdvancedFilters}
+        filters={advancedFilters}
+        onFiltersChange={setAdvancedFilters}
+        onApply={() => {
+          // Apply filters - reload customers
+          loadCustomers()
+        }}
+      />
     </div>
   )
 }

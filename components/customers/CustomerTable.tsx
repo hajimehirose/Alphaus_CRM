@@ -1,11 +1,14 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Trash2, ExternalLink, ArrowUp, ArrowDown } from 'lucide-react'
+import { Trash2, ExternalLink, ArrowUpNarrowWide, ArrowDownNarrowWide } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
 import type { Customer } from '@/types/database'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { useUserSettings, type ColumnConfig, type TableDensity } from '@/hooks/use-user-settings'
+import { DEFAULT_COLUMNS } from '@/lib/constants'
 
 interface CustomerTableProps {
   customers: Customer[]
@@ -24,11 +27,40 @@ export default function CustomerTable({
   onUpdate,
   onDelete,
   onNavigate,
+  selectedIds = new Set(),
+  onSelectionChange,
 }: CustomerTableProps) {
+  const { settings, loading: settingsLoading } = useUserSettings()
   const [editingCell, setEditingCell] = useState<{ id: number; field: string } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [sortField, setSortField] = useState<SortField>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>(null)
+  
+  // Get column configuration from settings or use defaults
+  const columnConfig: ColumnConfig[] = useMemo(() => {
+    if (settingsLoading || !settings.columns) {
+      return DEFAULT_COLUMNS.map((col, idx) => ({
+        ...col,
+        order: idx,
+      }))
+    }
+    return settings.columns.sort((a, b) => a.order - b.order)
+  }, [settings.columns, settingsLoading])
+
+  // Get density from settings or use default
+  const density: TableDensity = (settings.density as TableDensity) || 'comfortable'
+  
+  // Get visible columns
+  const visibleColumns = useMemo(() => {
+    return columnConfig.filter(col => col.visible)
+  }, [columnConfig])
+
+  // Density classes
+  const densityClasses = {
+    compact: 'px-2 py-1 text-xs',
+    comfortable: 'px-4 py-3 text-sm',
+    spacious: 'px-6 py-4 text-base',
+  }
 
   const handleCellClick = (customerId: number, field: string, currentValue: any) => {
     if (!editMode) return
@@ -91,16 +123,27 @@ export default function CustomerTable({
     })
   }, [customers, sortField, sortDirection])
 
-  const columns = [
-    { key: 'name_en', label: 'Name (EN)', editable: true, sortable: true },
-    { key: 'name_jp', label: 'Name (JP)', editable: true, sortable: true },
-    { key: 'company_site', label: 'Company Site', editable: true, sortable: true },
-    { key: 'tier', label: 'AWS Tier', editable: true, sortable: true },
-    { key: 'priority', label: 'Priority', editable: true, sortable: true },
-    { key: 'deal_stage', label: 'Stage', editable: true, sortable: true },
-    { key: 'deal_value_usd', label: 'Deal Value USD', editable: true, sortable: true },
-    { key: 'deal_probability', label: 'Probability', editable: false, sortable: true },
-  ]
+  // Helper function to check if field is editable
+  const isFieldEditable = (field: string): boolean => {
+    const col = columnConfig.find(c => c.field === field)
+    return col ? !col.locked && col.type !== 'number' : true
+  }
+
+  // Helper function to format cell value
+  const formatCellValue = (field: string, value: any): string => {
+    if (value === null || value === undefined) return '-'
+    
+    if (field === 'deal_value_usd') {
+      return formatCurrency(Number(value), 'USD')
+    }
+    if (field === 'deal_value_jpy') {
+      return formatCurrency(Number(value), 'JPY')
+    }
+    if (field === 'created_at' || field === 'updated_at') {
+      return formatDate(String(value))
+    }
+    return String(value)
+  }
 
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -108,61 +151,88 @@ export default function CustomerTable({
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
             <tr>
-              {columns.map(col => (
+              {onSelectionChange && (
+                <th className={`${densityClasses[density]} text-left`}>
+                  <Checkbox
+                    checked={selectedIds.size > 0 && selectedIds.size === customers.length}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        onSelectionChange(new Set(customers.map(c => c.id)))
+                      } else {
+                        onSelectionChange(new Set())
+                      }
+                    }}
+                  />
+                </th>
+              )}
+              {visibleColumns.map(col => (
                 <th 
-                  key={col.key} 
-                  className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase ${
-                    col.sortable ? 'cursor-pointer hover:bg-gray-100 select-none' : ''
+                  key={col.field} 
+                  className={`${densityClasses[density]} text-left font-medium text-gray-500 uppercase ${
+                    'cursor-pointer hover:bg-gray-100 select-none'
                   }`}
-                  onClick={() => col.sortable && handleSort(col.key as keyof Customer)}
+                  onClick={() => handleSort(col.field as keyof Customer)}
                 >
                   <div className="flex items-center gap-1">
                     {col.label}
-                    {col.sortable && sortField === col.key && (
+                    {sortField === col.field && (
                       sortDirection === 'asc' ? (
-                        <ArrowUp className="h-3 w-3" />
+                        <ArrowUpNarrowWide className="h-3 w-3" />
                       ) : (
-                        <ArrowDown className="h-3 w-3" />
+                        <ArrowDownNarrowWide className="h-3 w-3" />
                       )
                     )}
                   </div>
                 </th>
               ))}
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th className={`${densityClasses[density]} text-left font-medium text-gray-500 uppercase`}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {sortedCustomers.map(customer => (
               <tr key={customer.id} className="hover:bg-gray-50">
-                {columns.map(col => {
-                  const isEditing = editingCell?.id === customer.id && editingCell?.field === col.key
-                  const value = customer[col.key as keyof Customer]
+                {onSelectionChange && (
+                  <td className={densityClasses[density]}>
+                    <Checkbox
+                      checked={selectedIds.has(customer.id)}
+                      onCheckedChange={(checked) => {
+                        const newSelected = new Set(selectedIds)
+                        if (checked) {
+                          newSelected.add(customer.id)
+                        } else {
+                          newSelected.delete(customer.id)
+                        }
+                        onSelectionChange(newSelected)
+                      }}
+                    />
+                  </td>
+                )}
+                {visibleColumns.map(col => {
+                  const isEditing = editingCell?.id === customer.id && editingCell?.field === col.field
+                  const value = customer[col.field as keyof Customer]
+                  const editable = isFieldEditable(col.field) && editMode
 
                   return (
                     <td
-                      key={col.key}
-                      className="px-4 py-3 text-sm"
-                      onClick={() => col.editable && handleCellClick(customer.id, col.key, value)}
+                      key={col.field}
+                      className={`${densityClasses[density]}`}
+                      onClick={() => editable && handleCellClick(customer.id, col.field, value)}
                     >
                       {isEditing ? (
                         <Input
                           value={editValue}
                           onChange={(e) => setEditValue(e.target.value)}
-                          onBlur={() => handleSaveEdit(customer.id, col.key)}
+                          onBlur={() => handleSaveEdit(customer.id, col.field)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveEdit(customer.id, col.key)
+                            if (e.key === 'Enter') handleSaveEdit(customer.id, col.field)
                             if (e.key === 'Escape') handleCancelEdit()
                           }}
                           autoFocus
-                          className="h-8"
+                          className={density === 'compact' ? 'h-6 text-xs' : density === 'spacious' ? 'h-10' : 'h-8'}
                         />
                       ) : (
-                        <span className={col.editable && editMode ? 'cursor-pointer hover:bg-blue-50 p-1 rounded' : ''}>
-                          {col.key === 'deal_value_usd' && value
-                            ? formatCurrency(Number(value), 'USD')
-                            : col.key === 'created_at'
-                            ? formatDate(String(value))
-                            : String(value || '-')}
+                        <span className={editable ? 'cursor-pointer hover:bg-blue-50 p-1 rounded' : ''}>
+                          {formatCellValue(col.field, value)}
                         </span>
                       )}
                     </td>
