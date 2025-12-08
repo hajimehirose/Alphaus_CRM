@@ -15,7 +15,12 @@ export async function GET(request: Request) {
 
     const role = await getUserRole(user.id)
     if (!role) {
-      return NextResponse.json({ error: 'Role not found' }, { status: 403 })
+      return NextResponse.json({ 
+        error: 'Role not found',
+        message: 'You do not have a role assigned. Please contact an administrator to assign you a role in the user_roles table.',
+        userId: user.id,
+        userEmail: user.email,
+      }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -49,10 +54,31 @@ export async function GET(request: Request) {
     const { data: customers, error } = await query
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('Supabase query error:', error)
+      return NextResponse.json({ 
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      }, { status: 500 })
     }
 
-    return NextResponse.json({ customers: customers || [] })
+    // Log info for debugging
+    if (role === 'Sales') {
+      console.log(`Sales user ${user.email} found ${customers?.length || 0} customers`)
+    }
+
+    return NextResponse.json({ 
+      customers: customers || [],
+      count: customers?.length || 0,
+      role: role,
+      filters: {
+        search,
+        priority,
+        stage,
+        salesFilter: role === 'Sales' ? user.email : null,
+      },
+    })
   } catch (error: any) {
     console.error('Error in /api/customers GET:', error)
     return NextResponse.json(

@@ -43,18 +43,31 @@ export default function CustomersPage() {
       if (filterPriority) params.set('priority', filterPriority)
 
       const res = await fetch(`/api/customers?${params.toString()}`)
-      if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.error || 'Failed to load customers')
-      }
       const data = await res.json()
+      
+      if (!res.ok) {
+        // Check for specific error codes
+        if (res.status === 403 && data.error === 'Role not found') {
+          throw new Error('You do not have a role assigned. Please contact an administrator to assign you a role.')
+        }
+        throw new Error(data.error || 'Failed to load customers')
+      }
+      
       setCustomers(data.customers || [])
+      
+      // Show info if no customers found (but not an error)
+      if (data.customers && data.customers.length === 0) {
+        console.log('No customers found. This could be due to:')
+        console.log('1. No customers in the database')
+        console.log('2. Your role filters (Sales role only sees customers assigned to you)')
+        console.log('3. Active search/filter criteria')
+      }
     } catch (error: any) {
       console.error('Error loading customers:', error)
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: error.message || 'Failed to load customers',
+        title: 'Error Loading Customers',
+        description: error.message || 'Failed to load customers. Check console for details.',
       })
     } finally {
       setLoading(false)
