@@ -26,8 +26,15 @@ export async function GET() {
     }
 
     return NextResponse.json({ users: userRoles || [] })
-  } catch (error) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  } catch (error: any) {
+    console.error('Error in /api/users GET:', error)
+    return NextResponse.json(
+      { 
+        error: error.message || 'Internal server error',
+        details: error.message?.includes('Missing') ? 'Please configure Supabase environment variables in Vercel project settings' : undefined
+      },
+      { status: 500 }
+    )
   }
 }
 

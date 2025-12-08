@@ -7,14 +7,16 @@ export async function createClient() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || supabaseUrl === 'your_anon_key_here' || supabaseUrl.includes('YOUR_PROJECT_ID')) {
+    console.error('Missing NEXT_PUBLIC_SUPABASE_URL environment variable')
     throw new Error(
-      'Missing NEXT_PUBLIC_SUPABASE_URL. Please set it in your .env.local file with your actual Supabase project URL.'
+      'Missing NEXT_PUBLIC_SUPABASE_URL. Please configure it in your Vercel project settings.'
     )
   }
 
   if (!supabaseAnonKey || supabaseAnonKey === 'your_anon_key_here') {
+    console.error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable')
     throw new Error(
-      'Missing NEXT_PUBLIC_SUPABASE_ANON_KEY. Please set it in your .env.local file with your actual Supabase anon key.'
+      'Missing NEXT_PUBLIC_SUPABASE_ANON_KEY. Please configure it in your Vercel project settings.'
     )
   }
 
