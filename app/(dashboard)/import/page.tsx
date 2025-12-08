@@ -14,7 +14,7 @@ import { autoDetectMappings, validateRow, type ValidationError } from '@/lib/fie
 import { Progress } from '@/components/ui/progress'
 
 interface PreviewRow {
-  [key: string]: string
+  [key: string]: string | number | undefined
   __rowIndex?: number
 }
 
