@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Trash2, ExternalLink } from 'lucide-react'
+import { Trash2, ExternalLink, ArrowUp, ArrowDown } from 'lucide-react'
 import type { Customer } from '@/types/database'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
@@ -15,6 +15,9 @@ interface CustomerTableProps {
   onNavigate: (id: number) => void
 }
 
+type SortField = keyof Customer | null
+type SortDirection = 'asc' | 'desc' | null
+
 export default function CustomerTable({
   customers,
   editMode,
@@ -24,6 +27,8 @@ export default function CustomerTable({
 }: CustomerTableProps) {
   const [editingCell, setEditingCell] = useState<{ id: number; field: string } | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [sortField, setSortField] = useState<SortField>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null)
 
   const handleCellClick = (customerId: number, field: string, currentValue: any) => {
     if (!editMode) return
@@ -45,15 +50,56 @@ export default function CustomerTable({
     setEditValue('')
   }
 
+  const handleSort = (field: keyof Customer) => {
+    if (sortField === field) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc')
+      } else if (sortDirection === 'desc') {
+        setSortField(null)
+        setSortDirection(null)
+      } else {
+        setSortDirection('asc')
+      }
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortedCustomers = useMemo(() => {
+    if (!sortField || !sortDirection) return customers
+
+    return [...customers].sort((a, b) => {
+      const aVal = a[sortField]
+      const bVal = b[sortField]
+
+      if (aVal === null || aVal === undefined) return 1
+      if (bVal === null || bVal === undefined) return -1
+
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal
+      }
+
+      const aStr = String(aVal).toLowerCase()
+      const bStr = String(bVal).toLowerCase()
+
+      if (sortDirection === 'asc') {
+        return aStr.localeCompare(bStr)
+      } else {
+        return bStr.localeCompare(aStr)
+      }
+    })
+  }, [customers, sortField, sortDirection])
+
   const columns = [
-    { key: 'name_en', label: 'Name (EN)', editable: true },
-    { key: 'name_jp', label: 'Name (JP)', editable: true },
-    { key: 'company_site', label: 'Company Site', editable: true },
-    { key: 'tier', label: 'AWS Tier', editable: true },
-    { key: 'priority', label: 'Priority', editable: true },
-    { key: 'deal_stage', label: 'Stage', editable: true },
-    { key: 'deal_value_usd', label: 'Deal Value USD', editable: true },
-    { key: 'deal_probability', label: 'Probability', editable: false },
+    { key: 'name_en', label: 'Name (EN)', editable: true, sortable: true },
+    { key: 'name_jp', label: 'Name (JP)', editable: true, sortable: true },
+    { key: 'company_site', label: 'Company Site', editable: true, sortable: true },
+    { key: 'tier', label: 'AWS Tier', editable: true, sortable: true },
+    { key: 'priority', label: 'Priority', editable: true, sortable: true },
+    { key: 'deal_stage', label: 'Stage', editable: true, sortable: true },
+    { key: 'deal_value_usd', label: 'Deal Value USD', editable: true, sortable: true },
+    { key: 'deal_probability', label: 'Probability', editable: false, sortable: true },
   ]
 
   return (
@@ -63,15 +109,30 @@ export default function CustomerTable({
           <thead className="bg-gray-50 border-b">
             <tr>
               {columns.map(col => (
-                <th key={col.key} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  {col.label}
+                <th 
+                  key={col.key} 
+                  className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase ${
+                    col.sortable ? 'cursor-pointer hover:bg-gray-100 select-none' : ''
+                  }`}
+                  onClick={() => col.sortable && handleSort(col.key as keyof Customer)}
+                >
+                  <div className="flex items-center gap-1">
+                    {col.label}
+                    {col.sortable && sortField === col.key && (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp className="h-3 w-3" />
+                      ) : (
+                        <ArrowDown className="h-3 w-3" />
+                      )
+                    )}
+                  </div>
                 </th>
               ))}
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {customers.map(customer => (
+            {sortedCustomers.map(customer => (
               <tr key={customer.id} className="hover:bg-gray-50">
                 {columns.map(col => {
                   const isEditing = editingCell?.id === customer.id && editingCell?.field === col.key

@@ -10,8 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Search, Loader2 } from 'lucide-react'
 import type { UserRole } from '@/types/database'
 import { USER_ROLES } from '@/lib/constants'
+import { useToast } from '@/hooks/use-toast'
 
 export default function UsersPage() {
+  const { toast } = useToast()
   const [users, setUsers] = useState<UserRole[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -29,10 +31,22 @@ export default function UsersPage() {
         const data = await res.json()
         setUsers(data.users || [])
       } else if (res.status === 403) {
-        alert('You do not have permission to access this page')
+        toast({
+          variant: 'destructive',
+          title: 'Access Denied',
+          description: 'You do not have permission to access this page',
+        })
+      } else {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to load users')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading users:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to load users',
+      })
     } finally {
       setLoading(false)
     }
@@ -49,13 +63,23 @@ export default function UsersPage() {
         body: JSON.stringify({ role: newRole }),
       })
       if (res.ok) {
+        toast({
+          variant: 'success',
+          title: 'Success',
+          description: `User role updated to ${newRole}`,
+        })
         loadUsers()
       } else {
-        alert('Failed to update role')
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to update role')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating role:', error)
-      alert('An error occurred while updating the role')
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'An error occurred while updating the role',
+      })
     } finally {
       setUpdatingRoles(prev => {
         const next = new Set(prev)

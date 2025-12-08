@@ -10,8 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Download } from 'lucide-react'
 import type { ActivityLog } from '@/types/database'
 import { formatDateTime } from '@/lib/utils'
+import { useToast } from '@/hooks/use-toast'
 
 export default function ActivityLogPage() {
+  const { toast } = useToast()
   const [activities, setActivities] = useState<ActivityLog[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -44,35 +46,56 @@ export default function ActivityLogPage() {
         const data = await res.json()
         setActivities(data.activities || [])
         setTotalPages(data.pagination?.totalPages || 1)
+      } else {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to load activities')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading activities:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to load activities',
+      })
     } finally {
       setLoading(false)
     }
   }
 
   const handleExport = () => {
-    const csv = [
-      ['Date', 'User', 'Action', 'Entity Type', 'Field', 'Old Value', 'New Value'].join(','),
-      ...activities.map(a => [
-        formatDateTime(a.created_at),
-        a.user_name,
-        a.action,
-        a.entity_type,
-        a.field_name || '',
-        a.old_value || '',
-        a.new_value || '',
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
-    ].join('\n')
+    try {
+      const csv = [
+        ['Date', 'User', 'Action', 'Entity Type', 'Field', 'Old Value', 'New Value'].join(','),
+        ...activities.map(a => [
+          formatDateTime(a.created_at),
+          a.user_name,
+          a.action,
+          a.entity_type,
+          a.field_name || '',
+          a.old_value || '',
+          a.new_value || '',
+        ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      ].join('\n')
 
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `activity-log-${new Date().toISOString()}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `activity-log-${new Date().toISOString()}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({
+        variant: 'success',
+        title: 'Export Successful',
+        description: 'Activity log exported to CSV',
+      })
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Export Failed',
+        description: error.message || 'Failed to export activity log',
+      })
+    }
   }
 
   return (

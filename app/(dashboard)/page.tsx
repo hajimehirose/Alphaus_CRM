@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useToast } from '@/hooks/use-toast'
 
 export const dynamic = 'force-dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Plus, LayoutGrid, Table2, Columns, Edit2, Eye } from 'lucide-react'
+import { Plus, LayoutGrid, Table2, Columns, Edit2, Eye, Download } from 'lucide-react'
 import type { Customer } from '@/types/database'
 import CustomerForm from '@/components/customers/CustomerForm'
 import KanbanBoard from '@/components/customers/KanbanBoard'
@@ -21,6 +22,7 @@ type EditMode = 'view' | 'edit'
 export default function CustomersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { toast } = useToast()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('kanban')
@@ -41,10 +43,19 @@ export default function CustomersPage() {
       if (filterPriority) params.set('priority', filterPriority)
 
       const res = await fetch(`/api/customers?${params.toString()}`)
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to load customers')
+      }
       const data = await res.json()
       setCustomers(data.customers || [])
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading customers:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to load customers',
+      })
     } finally {
       setLoading(false)
     }
@@ -58,11 +69,24 @@ export default function CustomersPage() {
         body: JSON.stringify(customerData),
       })
       if (res.ok) {
+        toast({
+          variant: 'success',
+          title: 'Success',
+          description: 'Customer created successfully',
+        })
         setShowCreateDialog(false)
         loadCustomers()
+      } else {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to create customer')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating customer:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to create customer',
+      })
     }
   }
 
@@ -74,10 +98,23 @@ export default function CustomersPage() {
         body: JSON.stringify(updates),
       })
       if (res.ok) {
+        toast({
+          variant: 'success',
+          title: 'Success',
+          description: 'Customer updated successfully',
+        })
         loadCustomers()
+      } else {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to update customer')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating customer:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to update customer',
+      })
     }
   }
 
@@ -89,10 +126,23 @@ export default function CustomersPage() {
         method: 'DELETE',
       })
       if (res.ok) {
+        toast({
+          variant: 'success',
+          title: 'Success',
+          description: 'Customer deleted successfully',
+        })
         loadCustomers()
+      } else {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to delete customer')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting customer:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to delete customer',
+      })
     }
   }
 
@@ -111,6 +161,68 @@ export default function CustomersPage() {
     ? (pipelineMetrics.closedWon / pipelineMetrics.closedTotal) * 100 
     : 0
 
+  const handleExportCSV = () => {
+    try {
+      const headers = ['Name (EN)', 'Name (JP)', 'Company Site', 'AWS Tier', 'Priority', 'Deal Stage', 'Deal Value USD', 'Deal Probability', 'Created At', 'Updated At']
+      const rows = customers.map(c => [
+        c.name_en || '',
+        c.name_jp || '',
+        c.company_site || '',
+        c.tier || '',
+        c.priority || '',
+        c.deal_stage || '',
+        c.deal_value_usd || 0,
+        c.deal_probability || 0,
+        c.created_at || '',
+        c.updated_at || '',
+      ])
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ].join('\n')
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `customers-${new Date().toISOString().split('T')[0]}.csv`
+      link.click()
+      toast({
+        variant: 'success',
+        title: 'Export Successful',
+        description: 'Customer data exported to CSV',
+      })
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Export Failed',
+        description: error.message || 'Failed to export CSV',
+      })
+    }
+  }
+
+  const handleExportJSON = () => {
+    try {
+      const jsonContent = JSON.stringify(customers, null, 2)
+      const blob = new Blob([jsonContent], { type: 'application/json' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `customers-${new Date().toISOString().split('T')[0]}.json`
+      link.click()
+      toast({
+        variant: 'success',
+        title: 'Export Successful',
+        description: 'Customer data exported to JSON',
+      })
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Export Failed',
+        description: error.message || 'Failed to export JSON',
+      })
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -120,6 +232,20 @@ export default function CustomersPage() {
           <p className="text-muted-foreground">Manage your customer pipeline</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleExportCSV}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleExportJSON}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export JSON
+          </Button>
           <Button
             variant={editMode === 'edit' ? 'default' : 'outline'}
             onClick={() => setEditMode(editMode === 'view' ? 'edit' : 'view')}

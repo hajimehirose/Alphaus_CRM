@@ -10,6 +10,7 @@ import type { Customer, Note, Attachment, ActivityLog } from '@/types/database'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import CustomerForm from '@/components/customers/CustomerForm'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useToast } from '@/hooks/use-toast'
 
 const STORAGE_ICONS: Record<string, string> = {
   'Google Drive': '📁',
@@ -22,6 +23,7 @@ const STORAGE_ICONS: Record<string, string> = {
 export default function CustomerDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const { toast } = useToast()
   const customerId = params.id as string
 
   const [customer, setCustomer] = useState<Customer | null>(null)
@@ -48,10 +50,19 @@ export default function CustomerDetailPage() {
   const loadCustomer = async () => {
     try {
       const res = await fetch(`/api/customers/${customerId}`)
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to load customer')
+      }
       const data = await res.json()
       setCustomer(data.customer)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading customer:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to load customer',
+      })
     } finally {
       setLoading(false)
     }
@@ -88,7 +99,14 @@ export default function CustomerDetailPage() {
   }
 
   const handleAddNote = async () => {
-    if (!newNote.trim()) return
+    if (!newNote.trim()) {
+      toast({
+        variant: 'warning',
+        title: 'Invalid Input',
+        description: 'Note cannot be empty',
+      })
+      return
+    }
 
     try {
       const res = await fetch(`/api/customers/${customerId}/notes`, {
@@ -97,17 +115,37 @@ export default function CustomerDetailPage() {
         body: JSON.stringify({ content: newNote }),
       })
       if (res.ok) {
+        toast({
+          variant: 'success',
+          title: 'Success',
+          description: 'Note added successfully',
+        })
         setNewNote('')
         loadNotes()
         loadActivities()
+      } else {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to add note')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding note:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to add note',
+      })
     }
   }
 
   const handleAddAttachment = async () => {
-    if (!newAttachment.title || !newAttachment.url) return
+    if (!newAttachment.title || !newAttachment.url) {
+      toast({
+        variant: 'warning',
+        title: 'Invalid Input',
+        description: 'Title and URL are required',
+      })
+      return
+    }
 
     try {
       const res = await fetch(`/api/customers/${customerId}/attachments`, {
@@ -116,12 +154,25 @@ export default function CustomerDetailPage() {
         body: JSON.stringify(newAttachment),
       })
       if (res.ok) {
+        toast({
+          variant: 'success',
+          title: 'Success',
+          description: 'Attachment added successfully',
+        })
         setNewAttachment({ title: '', description: '', url: '', storage_type: 'Other' })
         loadAttachments()
         loadActivities()
+      } else {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to add attachment')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding attachment:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to add attachment',
+      })
     }
   }
 
@@ -131,11 +182,24 @@ export default function CustomerDetailPage() {
     try {
       const res = await fetch(`/api/notes/${noteId}`, { method: 'DELETE' })
       if (res.ok) {
+        toast({
+          variant: 'success',
+          title: 'Success',
+          description: 'Note deleted successfully',
+        })
         loadNotes()
         loadActivities()
+      } else {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to delete note')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting note:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to delete note',
+      })
     }
   }
 
@@ -145,11 +209,24 @@ export default function CustomerDetailPage() {
     try {
       const res = await fetch(`/api/attachments/${attachmentId}`, { method: 'DELETE' })
       if (res.ok) {
+        toast({
+          variant: 'success',
+          title: 'Success',
+          description: 'Attachment deleted successfully',
+        })
         loadAttachments()
         loadActivities()
+      } else {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to delete attachment')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting attachment:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to delete attachment',
+      })
     }
   }
 
@@ -161,12 +238,25 @@ export default function CustomerDetailPage() {
         body: JSON.stringify(updates),
       })
       if (res.ok) {
+        toast({
+          variant: 'success',
+          title: 'Success',
+          description: 'Customer updated successfully',
+        })
         setShowEditDialog(false)
         loadCustomer()
         loadActivities()
+      } else {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to update customer')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating customer:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to update customer',
+      })
     }
   }
 

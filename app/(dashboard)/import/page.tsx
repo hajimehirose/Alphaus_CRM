@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Upload, FileSpreadsheet, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import Papa from 'papaparse'
+import { useToast } from '@/hooks/use-toast'
 
 interface PreviewRow {
   [key: string]: string
 }
 
 export default function ImportPage() {
+  const { toast } = useToast()
   const [file, setFile] = useState<File | null>(null)
   const [previewData, setPreviewData] = useState<PreviewRow[]>([])
   const [headers, setHeaders] = useState<string[]>([])
@@ -27,7 +29,11 @@ export default function ImportPage() {
     if (!selectedFile) return
 
     if (!selectedFile.name.endsWith('.csv')) {
-      alert('Please select a CSV file')
+      toast({
+        variant: 'warning',
+        title: 'Invalid File',
+        description: 'Please select a CSV file',
+      })
       return
     }
 
@@ -108,9 +114,19 @@ export default function ImportPage() {
       const result = await executeRes.json()
       setImportResult(result)
       setStatus('success')
+      toast({
+        variant: 'success',
+        title: 'Import Successful',
+        description: `Imported ${result.success || 0} customers successfully`,
+      })
     } catch (error: any) {
       setErrorMessage(error.message || 'An error occurred during import')
       setStatus('error')
+      toast({
+        variant: 'destructive',
+        title: 'Import Failed',
+        description: error.message || 'An error occurred during import',
+      })
     } finally {
       setLoading(false)
     }
