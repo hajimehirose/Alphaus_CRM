@@ -104,7 +104,7 @@ export default function AdvancedFilters({
         <div className="space-y-4 py-4">
           {localFilters.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              No filters applied. Click "Add Filter" to get started.
+              No filters applied. Click &quot;Add Filter&quot; to get started.
             </p>
           ) : (
             localFilters.map((filter, index) => (

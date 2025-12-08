@@ -19,7 +19,7 @@ export default function FieldMappingTable({
       <div className="bg-gray-50 px-4 py-3 border-b">
         <h3 className="font-medium">Map CSV Columns to Database Fields</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Match each CSV column to a database field, or leave as "Skip" to ignore
+          Match each CSV column to a database field, or leave as &quot;Skip&quot; to ignore
         </p>
       </div>
       <div className="divide-y max-h-96 overflow-y-auto">

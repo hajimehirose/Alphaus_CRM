@@ -486,7 +486,7 @@ export default function ImportPage() {
                           checked={duplicateHandling === 'skip'}
                           onChange={(e) => setDuplicateHandling(e.target.value as any)}
                         />
-                        <span>Skip duplicates (don't import)</span>
+                        <span>Skip duplicates (don&apos;t import)</span>
                       </label>
                       <label className="flex items-center gap-2">
                         <input

@@ -28,6 +28,7 @@ export default function ActivityLogPage() {
 
   useEffect(() => {
     loadActivities()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, filters])
 
   const loadActivities = async () => {

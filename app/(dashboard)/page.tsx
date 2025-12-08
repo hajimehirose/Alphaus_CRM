@@ -53,6 +53,7 @@ export default function CustomersPage() {
 
   useEffect(() => {
     loadCustomers()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, filterPriority])
 
   const loadCustomers = async () => {

@@ -45,6 +45,7 @@ export default function CustomerDetailPage() {
     loadNotes()
     loadAttachments()
     loadActivities()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId])
 
   const loadCustomer = async () => {
