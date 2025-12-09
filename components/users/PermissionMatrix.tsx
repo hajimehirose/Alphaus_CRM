@@ -12,7 +12,7 @@ export default function PermissionMatrix() {
     const allowedRoles = resourcePerms[action as keyof typeof resourcePerms]
     if (!allowedRoles) return false
 
-    return Array.isArray(allowedRoles) && allowedRoles.includes(role)
+    return Array.isArray(allowedRoles) && (allowedRoles as readonly string[]).includes(role)
   }
 
   const formatResourceName = (resource: string): string => {

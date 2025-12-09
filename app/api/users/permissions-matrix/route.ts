@@ -27,7 +27,7 @@ export async function GET() {
     }
 
     // Build permission matrix
-    const matrix: Record<string, Record<string, boolean>> = {}
+    const matrix: Record<string, Record<string, Record<string, boolean>>> = {}
 
     Object.entries(PERMISSIONS).forEach(([resource, resourcePerms]) => {
       if (!matrix[resource]) {
@@ -35,8 +35,9 @@ export async function GET() {
       }
 
       Object.entries(resourcePerms).forEach(([action, allowedRoles]) => {
-        const key = `${resource}.${action}`
-        matrix[resource][action] = {}
+        if (!matrix[resource][action]) {
+          matrix[resource][action] = {} as Record<string, boolean>
+        }
         
         USER_ROLES.forEach(roleName => {
           matrix[resource][action][roleName] = (allowedRoles as readonly string[]).includes(roleName)

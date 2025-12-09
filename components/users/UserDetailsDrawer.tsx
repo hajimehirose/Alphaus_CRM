@@ -22,6 +22,7 @@ interface UserDetailsDrawerProps {
     id: string
     email: string
     name: string
+    avatar: string | null
     role: string | null
     status: 'active' | 'pending' | 'no_role'
     lastLogin: string | null
