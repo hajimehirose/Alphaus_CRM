@@ -6,11 +6,13 @@ import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Upload, FileSpreadsheet, CheckCircle, XCircle, AlertCircle, Loader2, AlertTriangle } from 'lucide-react'
-import Papa from 'papaparse'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Upload, FileSpreadsheet, CheckCircle, XCircle, AlertCircle, Loader2, AlertTriangle, Download, FileCheck } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import FieldMappingTable from '@/components/import/FieldMappingTable'
+import PreviewTable from '@/components/import/PreviewTable'
 import { autoDetectMappings, validateRow, type ValidationError } from '@/lib/field-mapping'
+import { parseFile, validateFileSize, validateFileType, formatFileSize } from '@/lib/file-parser'
 import { Progress } from '@/components/ui/progress'
 
 interface PreviewRow {
@@ -18,7 +20,7 @@ interface PreviewRow {
   __rowIndex?: number
 }
 
-type ImportStep = 'upload' | 'mapping' | 'validation' | 'duplicates' | 'importing' | 'complete'
+type ImportStep = 'upload' | 'mapping' | 'preview' | 'validation' | 'duplicates' | 'importing' | 'complete'
 
 export default function ImportPage() {
   const { toast } = useToast()
@@ -28,82 +30,97 @@ export default function ImportPage() {
   const [step, setStep] = useState<ImportStep>('upload')
   const [mappings, setMappings] = useState<Record<string, string>>({})
   const [duplicateHandling, setDuplicateHandling] = useState<'skip' | 'update' | 'create'>('skip')
+  const [dryRun, setDryRun] = useState(false)
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
   const [duplicateRows, setDuplicateRows] = useState<Set<number>>(new Set())
+  const [databaseDuplicates, setDatabaseDuplicates] = useState<Map<number, any>>(new Map())
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [progressMessage, setProgressMessage] = useState('')
   const [importResult, setImportResult] = useState<any>(null)
   const [errorMessage, setErrorMessage] = useState('')
+  const [isDragOver, setIsDragOver] = useState(false)
 
-  // Preview data (first 10 rows)
-  const previewData = useMemo(() => allRows.slice(0, 10), [allRows])
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (!selectedFile) return
-
-    if (!selectedFile.name.endsWith('.csv')) {
+  const handleFileSelect = async (selectedFile: File) => {
+    // Validate file type
+    const typeValidation = validateFileType(selectedFile)
+    if (!typeValidation.valid) {
       toast({
-        title: 'Invalid File',
-        description: 'Please select a CSV file',
+        title: 'Invalid File Type',
+        description: typeValidation.error,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Validate file size (10MB limit)
+    const sizeValidation = validateFileSize(selectedFile)
+    if (!sizeValidation.valid) {
+      toast({
+        title: 'File Too Large',
+        description: sizeValidation.error,
         variant: 'destructive',
       })
       return
     }
 
     setFile(selectedFile)
-    parseCSV(selectedFile)
+    setLoading(true)
+    setErrorMessage('')
+
+    try {
+      const parsed = await parseFile(selectedFile)
+      setHeaders(parsed.headers)
+      setAllRows(parsed.rows)
+      
+      // Auto-detect field mappings
+      const autoMappings = autoDetectMappings(parsed.headers)
+      setMappings(autoMappings)
+      
+      toast({
+        title: 'File Parsed',
+        description: `Found ${parsed.rowCount} rows. Please map the fields.`,
+        variant: 'success',
+      })
+      
+      setStep('mapping')
+    } catch (error: any) {
+      setErrorMessage(error.message || 'Failed to parse file')
+      toast({
+        title: 'Parse Error',
+        description: error.message || 'Failed to parse file',
+        variant: 'destructive',
+      })
+      setFile(null)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const parseCSV = (file: File) => {
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (results.errors.length > 0) {
-          setErrorMessage('Error parsing CSV: ' + results.errors[0].message)
-          toast({
-            title: 'Parse Error',
-            description: results.errors[0].message,
-            variant: 'destructive',
-          })
-          return
-        }
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0]
+    if (selectedFile) {
+      handleFileSelect(selectedFile)
+    }
+  }
 
-        const data = results.data as PreviewRow[]
-        if (data.length === 0) {
-          setErrorMessage('CSV file is empty')
-          toast({
-            title: 'Empty File',
-            description: 'The CSV file is empty',
-            variant: 'destructive',
-          })
-          return
-        }
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
 
-        // Add row indices
-        data.forEach((row, idx) => {
-          row.__rowIndex = idx + 1
-        })
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }
 
-        setHeaders(Object.keys(data[0]))
-        setAllRows(data)
-        setErrorMessage('')
-
-        // Auto-detect field mappings
-        const autoMappings = autoDetectMappings(Object.keys(data[0]))
-        setMappings(autoMappings)
-        setStep('mapping')
-      },
-      error: (error) => {
-        setErrorMessage('Error reading file: ' + error.message)
-        toast({
-          title: 'File Error',
-          description: error.message,
-          variant: 'destructive',
-        })
-      },
-    })
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const droppedFile = e.dataTransfer.files[0]
+    if (droppedFile) {
+      handleFileSelect(droppedFile)
+    }
   }
 
   const handleMappingChange = (csvColumn: string, databaseField: string | null) => {
@@ -130,7 +147,7 @@ export default function ImportPage() {
 
     setValidationErrors(errors)
 
-    // Check for duplicates
+    // Check for duplicates within file
     const nameEnField = Object.keys(mappings).find(col => mappings[col] === 'name_en')
     if (nameEnField) {
       const names = new Map<string, number[]>()
@@ -155,6 +172,40 @@ export default function ImportPage() {
       setDuplicateRows(duplicates)
     }
 
+    // Check for duplicates in database
+    try {
+      const duplicateCheckRes = await fetch('/api/import/check-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rows: allRows,
+          mappings,
+        }),
+      })
+
+      if (duplicateCheckRes.ok) {
+        const duplicateData = await duplicateCheckRes.json()
+        const dbDuplicateMap = new Map<number, any>()
+        duplicateData.duplicates?.forEach((dup: any) => {
+          dbDuplicateMap.set(dup.rowIndex, dup.existingCustomer)
+        })
+        setDatabaseDuplicates(dbDuplicateMap)
+        
+        // Add database duplicates to duplicateRows set (indices are 0-based)
+        if (duplicateData.duplicateRowIndices && Array.isArray(duplicateData.duplicateRowIndices)) {
+          setDuplicateRows(prev => {
+            const newSet = new Set(prev)
+            duplicateData.duplicateRowIndices.forEach((idx: number) => {
+              newSet.add(idx)
+            })
+            return newSet
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error checking database duplicates:', error)
+    }
+
     setLoading(false)
 
     // Check if there are critical errors
@@ -166,14 +217,13 @@ export default function ImportPage() {
         variant: 'destructive',
       })
       setStep('validation')
-    } else if (duplicateRows.size > 0) {
-      setStep('duplicates')
     } else {
+      setStep('preview')
       toast({
         title: 'Validation Complete',
-        description: 'No errors found. Ready to import.',
+        description: 'Data validated. Review the preview before importing.',
+        variant: 'success',
       })
-      setStep('duplicates') // Show duplicate handling even if no duplicates
     }
   }
 
@@ -183,6 +233,7 @@ export default function ImportPage() {
     setLoading(true)
     setStep('importing')
     setProgress(0)
+    setProgressMessage('Uploading file...')
     setErrorMessage('')
 
     try {
@@ -202,20 +253,7 @@ export default function ImportPage() {
 
       const uploadData = await uploadRes.json()
       setProgress(25)
-
-      // Prepare data with mappings
-      const mappedData = allRows.map((row) => {
-        const mapped: any = {}
-        Object.entries(mappings).forEach(([csvCol, dbField]) => {
-          if (dbField && row[csvCol]) {
-            const value = row[csvCol]
-            mapped[dbField] = typeof value === 'string' ? value.trim() : String(value)
-          }
-        })
-        return mapped
-      })
-
-      setProgress(50)
+      setProgressMessage('Processing data...')
 
       // Execute import
       const executeRes = await fetch('/api/import/execute', {
@@ -224,12 +262,13 @@ export default function ImportPage() {
         body: JSON.stringify({
           sessionId: uploadData.sessionId,
           duplicateHandling,
-          dryRun: false,
+          dryRun,
           mappings,
         }),
       })
 
       setProgress(75)
+      setProgressMessage('Finalizing import...')
 
       if (!executeRes.ok) {
         const error = await executeRes.json()
@@ -239,15 +278,19 @@ export default function ImportPage() {
       const result = await executeRes.json()
       setImportResult(result)
       setProgress(100)
+      setProgressMessage('Import complete!')
       setStep('complete')
 
       toast({
-        title: 'Import Complete',
-        description: `Successfully imported ${result.success || 0} customers`,
+        variant: 'success',
+        title: dryRun ? 'Dry Run Complete' : 'Import Complete',
+        description: dryRun 
+          ? `Would import ${result.success || 0} customers, update ${result.updated || 0}, skip ${result.skipped || 0}`
+          : `Successfully imported ${result.success || 0} customers`,
       })
     } catch (error: any) {
       setErrorMessage(error.message || 'An error occurred during import')
-      setStep('mapping')
+      setStep('preview')
       toast({
         title: 'Import Failed',
         description: error.message || 'An error occurred during import',
@@ -258,65 +301,127 @@ export default function ImportPage() {
     }
   }
 
+  const handleDownloadErrorReport = () => {
+    if (!importResult?.errors || importResult.errors.length === 0) {
+      toast({
+        title: 'No Errors',
+        description: 'There are no errors to download.',
+      })
+      return
+    }
+
+    const csv = [
+      ['Row', 'Error'].join(','),
+      ...importResult.errors.map((err: any) => [
+        err.row || '',
+        `"${String(err.error || err.message || '').replace(/"/g, '""')}"`,
+      ].join(','))
+    ].join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `import-errors-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+
+    toast({
+      title: 'Error Report Downloaded',
+      description: 'Error report has been downloaded.',
+    })
+  }
+
   const criticalErrorCount = validationErrors.filter(e => e.level === 'error').length
   const warningCount = validationErrors.filter(e => e.level === 'warning').length
+  const totalDuplicateCount = duplicateRows.size + databaseDuplicates.size
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Import Customers</h1>
-        <p className="text-muted-foreground">Upload and map CSV data to import customers</p>
+        <p className="text-muted-foreground">Upload CSV or Excel files to import customer data</p>
       </div>
 
       {/* Step indicator */}
-      <div className="flex items-center gap-2">
-        {['upload', 'mapping', 'validation', 'duplicates', 'importing', 'complete'].map((s, idx) => (
-          <div key={s} className="flex items-center">
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                step === s
-                  ? 'bg-primary text-primary-foreground'
-                  : idx < ['upload', 'mapping', 'validation', 'duplicates', 'importing', 'complete'].indexOf(step)
-                  ? 'bg-green-500 text-white'
-                  : 'bg-gray-200 text-gray-600'
-              }`}
-            >
-              {idx + 1}
+      <div className="flex items-center gap-2 flex-wrap">
+        {['upload', 'mapping', 'preview', 'duplicates', 'importing', 'complete'].map((s, idx) => {
+          const stepOrder = ['upload', 'mapping', 'preview', 'duplicates', 'importing', 'complete']
+          const currentStepIdx = stepOrder.indexOf(step)
+          const stepIdx = stepOrder.indexOf(s)
+          const isActive = step === s
+          const isCompleted = stepIdx < currentStepIdx
+          
+          return (
+            <div key={s} className="flex items-center">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : isCompleted
+                    ? 'bg-green-500 text-white'
+                    : 'bg-gray-200 text-gray-600'
+                }`}
+              >
+                {isCompleted ? <CheckCircle className="h-4 w-4" /> : idx + 1}
+              </div>
+              {idx < 5 && <div className={`w-12 h-1 mx-1 ${isCompleted ? 'bg-green-500' : 'bg-gray-200'}`} />}
             </div>
-            {idx < 5 && <div className="w-12 h-1 bg-gray-200 mx-1" />}
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>
-            {step === 'upload' && 'Upload CSV File'}
+            {step === 'upload' && 'Upload File'}
             {step === 'mapping' && 'Map Fields'}
-            {step === 'validation' && 'Validate Data'}
+            {step === 'preview' && 'Preview Data'}
+            {step === 'validation' && 'Validation Errors'}
             {step === 'duplicates' && 'Handle Duplicates'}
-            {step === 'importing' && 'Importing...'}
-            {step === 'complete' && 'Import Complete'}
+            {step === 'importing' && (dryRun ? 'Dry Run...' : 'Importing...')}
+            {step === 'complete' && (dryRun ? 'Dry Run Complete' : 'Import Complete')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Upload Step */}
           {step === 'upload' && (
             <div className="space-y-4">
-              <div className="border-2 border-dashed rounded-lg p-8 text-center">
+              <div
+                className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
+                  isDragOver
+                    ? 'border-primary bg-primary/5'
+                    : 'border-gray-300 hover:border-gray-400'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
                 <input
                   type="file"
-                  accept=".csv"
-                  onChange={handleFileSelect}
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileInputChange}
                   className="hidden"
                   id="file-upload"
+                  disabled={loading}
                 />
                 <label htmlFor="file-upload" className="cursor-pointer">
-                  <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  {loading ? (
+                    <Loader2 className="h-12 w-12 mx-auto mb-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  )}
                   <p className="text-sm font-medium mb-1">
-                    Click to upload or drag and drop
+                    {loading ? 'Parsing file...' : 'Click to upload or drag and drop'}
                   </p>
-                  <p className="text-xs text-muted-foreground">CSV files only</p>
+                  <p className="text-xs text-muted-foreground">
+                    CSV or Excel files (.csv, .xlsx, .xls) up to 10MB
+                  </p>
+                  {file && (
+                    <p className="text-sm mt-2 text-green-600">
+                      {file.name} ({formatFileSize(file.size)})
+                    </p>
+                  )}
                 </label>
               </div>
               <div className="text-center">
@@ -328,7 +433,7 @@ export default function ImportPage() {
                     const url = URL.createObjectURL(blob)
                     const a = document.createElement('a')
                     a.href = url
-                    a.download = 'customer-import-template.csv'
+                    a.download = 'crm_import_template.csv'
                     a.click()
                     URL.revokeObjectURL(url)
                     toast({
@@ -349,7 +454,7 @@ export default function ImportPage() {
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {allRows.length} rows detected. Map each CSV column to a database field.
+                  {allRows.length} rows detected. Map each CSV/Excel column to a database field.
                 </p>
                 <FieldMappingTable
                   csvHeaders={headers}
@@ -370,6 +475,41 @@ export default function ImportPage() {
                   ) : (
                     'Validate & Continue'
                   )}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Preview Step */}
+          {step === 'preview' && (
+            <div className="space-y-4">
+              <PreviewTable
+                rows={allRows}
+                headers={headers}
+                mappings={mappings}
+                validationErrors={validationErrors}
+                duplicateRows={duplicateRows}
+              />
+              
+              {totalDuplicateCount > 0 && (
+                <div className="flex items-center gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                  <div>
+                    <h3 className="font-medium text-yellow-900">Duplicates Detected</h3>
+                    <p className="text-sm text-yellow-800">
+                      {duplicateRows.size} duplicate(s) within file
+                      {databaseDuplicates.size > 0 && `, ${databaseDuplicates.size} match existing customers`}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setStep('mapping')}>
+                  Back to Mapping
+                </Button>
+                <Button onClick={() => setStep('duplicates')}>
+                  Continue to Duplicates
                 </Button>
               </div>
             </div>
@@ -426,8 +566,8 @@ export default function ImportPage() {
                   Back to Mapping
                 </Button>
                 {criticalErrorCount === 0 && (
-                  <Button onClick={() => setStep('duplicates')}>
-                    Continue
+                  <Button onClick={() => setStep('preview')}>
+                    Continue to Preview
                   </Button>
                 )}
               </div>
@@ -437,43 +577,27 @@ export default function ImportPage() {
           {/* Duplicate Handling Step */}
           {step === 'duplicates' && (
             <div className="space-y-4">
-              {duplicateRows.size > 0 ? (
+              <div className="flex items-center gap-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <FileCheck className="h-5 w-5 text-blue-600" />
+                <div className="flex-1">
+                  <h3 className="font-medium text-blue-900">Ready to Import</h3>
+                  <p className="text-sm text-blue-800">
+                    Review duplicate handling options and dry run settings
+                  </p>
+                </div>
+              </div>
+
+              {totalDuplicateCount > 0 && (
                 <>
                   <div className="flex items-center gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <AlertTriangle className="h-5 w-5 text-yellow-600" />
                     <div>
                       <h3 className="font-medium text-yellow-900">Duplicates Found</h3>
                       <p className="text-sm text-yellow-800">
-                        {duplicateRows.size} duplicate rows detected
+                        {duplicateRows.size} duplicate(s) within file
+                        {databaseDuplicates.size > 0 && `, ${databaseDuplicates.size} match existing customers`}
                       </p>
                     </div>
-                  </div>
-
-                  <div className="border rounded-lg max-h-48 overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
-                          <th className="px-4 py-2 text-left">Row</th>
-                          {headers.slice(0, 5).map((header) => (
-                            <th key={header} className="px-4 py-2 text-left">
-                              {header}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {Array.from(duplicateRows).slice(0, 10).map((rowIdx) => (
-                          <tr key={rowIdx} className="bg-yellow-50">
-                            <td className="px-4 py-2">{rowIdx + 1}</td>
-                            {headers.slice(0, 5).map((header) => (
-                              <td key={header} className="px-4 py-2">
-                                {allRows[rowIdx]?.[header] || '-'}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
                   </div>
 
                   <div>
@@ -481,49 +605,72 @@ export default function ImportPage() {
                       How should duplicates be handled?
                     </label>
                     <div className="space-y-2">
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
                         <input
                           type="radio"
                           value="skip"
                           checked={duplicateHandling === 'skip'}
                           onChange={(e) => setDuplicateHandling(e.target.value as any)}
                         />
-                        <span>Skip duplicates (don&apos;t import)</span>
+                        <div>
+                          <span className="font-medium">Skip duplicates</span>
+                          <p className="text-xs text-muted-foreground">Don&apos;t import rows that match existing customers</p>
+                        </div>
                       </label>
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
                         <input
                           type="radio"
                           value="update"
                           checked={duplicateHandling === 'update'}
                           onChange={(e) => setDuplicateHandling(e.target.value as any)}
                         />
-                        <span>Update existing records</span>
+                        <div>
+                          <span className="font-medium">Update existing records</span>
+                          <p className="text-xs text-muted-foreground">Overwrite existing customer data with imported data</p>
+                        </div>
                       </label>
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
                         <input
                           type="radio"
                           value="create"
                           checked={duplicateHandling === 'create'}
                           onChange={(e) => setDuplicateHandling(e.target.value as any)}
                         />
-                        <span>Create new records (allow duplicates)</span>
+                        <div>
+                          <span className="font-medium">Create new records</span>
+                          <p className="text-xs text-muted-foreground">Allow duplicates and create new customer records</p>
+                        </div>
                       </label>
                     </div>
                   </div>
                 </>
-              ) : (
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <CheckCircle className="h-5 w-5 text-green-600 mb-2" />
-                  <p className="text-sm text-green-800">No duplicates found. Ready to import.</p>
-                </div>
               )}
 
+              <div className="p-4 border rounded-lg">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <Checkbox
+                    checked={dryRun}
+                    onCheckedChange={(checked) => setDryRun(checked as boolean)}
+                  />
+                  <div>
+                    <span className="font-medium">Dry Run Mode</span>
+                    <p className="text-xs text-muted-foreground">
+                      Validate and preview import without saving data to the database
+                    </p>
+                  </div>
+                </label>
+              </div>
+
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setStep('mapping')}>
+                <Button variant="outline" onClick={() => setStep('preview')}>
                   Back
                 </Button>
                 <Button onClick={handleImport} disabled={loading}>
-                  Import {allRows.length} Customers
+                  {dryRun ? (
+                    <>Perform Dry Run ({allRows.length} rows)</>
+                  ) : (
+                    <>Import {allRows.length} Customers</>
+                  )}
                 </Button>
               </div>
             </div>
@@ -533,35 +680,95 @@ export default function ImportPage() {
           {step === 'importing' && (
             <div className="space-y-4">
               <Progress value={progress} />
-              <p className="text-sm text-center text-muted-foreground">
-                Importing... {progress}%
-              </p>
+              <div className="text-center">
+                <p className="text-sm font-medium mb-1">{progressMessage}</p>
+                <p className="text-xs text-muted-foreground">{progress}% complete</p>
+              </div>
             </div>
           )}
 
           {/* Complete Step */}
           {step === 'complete' && importResult && (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                <h3 className="font-medium text-green-900">Import Successful</h3>
-              </div>
-              <div className="space-y-1 text-sm text-green-800">
-                <p>✓ {importResult.success || 0} customers imported</p>
-                {importResult.updated > 0 && (
-                  <p>✓ {importResult.updated} customers updated</p>
-                )}
-                {importResult.skipped > 0 && (
-                  <p>○ {importResult.skipped} customers skipped</p>
-                )}
+            <div className="space-y-4">
+              <div className={`p-4 border rounded-lg ${dryRun ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'}`}>
+                <div className="flex items-center gap-2 mb-4">
+                  {dryRun ? (
+                    <FileCheck className="h-5 w-5 text-blue-600" />
+                  ) : (
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  )}
+                  <h3 className={`font-medium ${dryRun ? 'text-blue-900' : 'text-green-900'}`}>
+                    {dryRun ? 'Dry Run Complete' : 'Import Successful'}
+                  </h3>
+                </div>
+                
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="bg-white p-3 rounded border">
+                    <div className="text-xs text-muted-foreground">Success</div>
+                    <div className="text-2xl font-bold text-green-600">{importResult.success || 0}</div>
+                  </div>
+                  {importResult.updated > 0 && (
+                    <div className="bg-white p-3 rounded border">
+                      <div className="text-xs text-muted-foreground">Updated</div>
+                      <div className="text-2xl font-bold text-blue-600">{importResult.updated || 0}</div>
+                    </div>
+                  )}
+                  {importResult.skipped > 0 && (
+                    <div className="bg-white p-3 rounded border">
+                      <div className="text-xs text-muted-foreground">Skipped</div>
+                      <div className="text-2xl font-bold text-yellow-600">{importResult.skipped || 0}</div>
+                    </div>
+                  )}
+                  {importResult.errors && importResult.errors.length > 0 && (
+                    <div className="bg-white p-3 rounded border">
+                      <div className="text-xs text-muted-foreground">Errors</div>
+                      <div className="text-2xl font-bold text-red-600">{importResult.errors.length}</div>
+                    </div>
+                  )}
+                </div>
+
                 {importResult.errors && importResult.errors.length > 0 && (
-                  <p className="text-red-600">
-                    ✗ {importResult.errors.length} errors occurred
-                  </p>
+                  <div className="mt-4">
+                    <Button variant="outline" size="sm" onClick={handleDownloadErrorReport}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Error Report
+                    </Button>
+                  </div>
+                )}
+
+                {!dryRun && importResult.success > 0 && (
+                  <div className="mt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        window.location.href = '/'
+                      }}
+                    >
+                      View Customers
+                    </Button>
+                  </div>
+                )}
+
+                {dryRun && (
+                  <div className="mt-4 p-3 bg-blue-100 rounded">
+                    <p className="text-sm text-blue-900">
+                      This was a dry run. No data was saved to the database. Click &quot;Proceed with Import&quot; to perform the actual import.
+                    </p>
+                    <Button
+                      className="mt-3"
+                      onClick={() => {
+                        setDryRun(false)
+                        handleImport()
+                      }}
+                    >
+                      Proceed with Import
+                    </Button>
+                  </div>
                 )}
               </div>
+
               <Button
-                className="mt-4"
+                variant="outline"
                 onClick={() => {
                   setStep('upload')
                   setFile(null)
@@ -570,8 +777,10 @@ export default function ImportPage() {
                   setMappings({})
                   setValidationErrors([])
                   setDuplicateRows(new Set())
+                  setDatabaseDuplicates(new Map())
                   setImportResult(null)
                   setErrorMessage('')
+                  setDryRun(false)
                 }}
               >
                 Import Another File

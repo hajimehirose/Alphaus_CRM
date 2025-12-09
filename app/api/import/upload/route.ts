@@ -3,6 +3,9 @@ import { getUserRole } from '@/lib/permissions'
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
@@ -22,6 +25,24 @@ export async function POST(request: Request) {
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    }
+
+    // Validate file size (10MB limit)
+    const maxSize = 10 * 1024 * 1024 // 10MB
+    if (file.size > maxSize) {
+      return NextResponse.json({ 
+        error: `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds the maximum limit of 10MB` 
+      }, { status: 400 })
+    }
+
+    // Validate file type
+    const fileName = file.name.toLowerCase()
+    const validExtensions = ['.csv', '.xlsx', '.xls']
+    const isValidType = validExtensions.some(ext => fileName.endsWith(ext))
+    if (!isValidType) {
+      return NextResponse.json({ 
+        error: 'Invalid file type. Please use CSV or Excel files (.csv, .xlsx, .xls)' 
+      }, { status: 400 })
     }
 
     // Upload to Supabase Storage

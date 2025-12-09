@@ -13,7 +13,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Create CSV template with headers
+    // Create CSV template with headers and example data
     const headers = [
       'name_en',
       'name_jp',
@@ -32,7 +32,40 @@ export async function GET() {
       'deal_value_jpy',
     ]
 
-    const csvContent = headers.join(',') + '\n'
+    // Add example row
+    const exampleRow = [
+      'Acme Corporation',
+      'エイム株式会社',
+      'https://acme.com',
+      'Premier',
+      'AWS, GCP',
+      'High',
+      '✓',
+      '-',
+      'John Doe',
+      'Jane Smith',
+      'sales@example.com',
+      'exec@example.com',
+      'Qualified',
+      '100000',
+      '15000000',
+    ]
+
+    // Add comments row
+    const comments = [
+      '# Required: name_en',
+      '# Optional: all other fields',
+      '# Tier options: Premier, Advanced, Selected, -',
+      '# Priority options: High, Mid, Low',
+      '# Deal Stage options: Lead, Qualified, Meeting Scheduled, Demo Completed, Proposal Sent, Negotiation, Closed Won, Closed Lost',
+      '# Ripple/Archera Customer: ✓ or -',
+    ]
+
+    const csvContent = [
+      headers.join(','),
+      exampleRow.map(v => `"${v}"`).join(','),
+      comments.join(','),
+    ].join('\n')
 
     return new NextResponse(csvContent, {
       headers: {

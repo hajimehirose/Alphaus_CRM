@@ -135,6 +135,38 @@ export function validateRow(row: any, mapping: Record<string, string>): Validati
       })
     }
   }
+
+  // Validate dropdown values
+  const dropdownFields = DATABASE_FIELDS.filter(f => f.type === 'dropdown' && f.options)
+  for (const field of dropdownFields) {
+    const csvColumn = Object.keys(mapping).find(col => mapping[col] === field.key)
+    if (csvColumn && row[csvColumn]) {
+      const value = String(row[csvColumn]).trim()
+      if (value && field.options && !field.options.includes(value)) {
+        errors.push({
+          row: row.__rowIndex || 0,
+          field: field.key,
+          message: `${field.label} must be one of: ${field.options.join(', ')}`,
+          level: 'warning',
+        })
+      }
+    }
+  }
+
+  // Validate deal_stage against DEAL_STAGES
+  const dealStageColumn = Object.keys(mapping).find(col => mapping[col] === 'deal_stage')
+  if (dealStageColumn && row[dealStageColumn]) {
+    const dealStage = String(row[dealStageColumn]).trim()
+    const validStages = ['Lead', 'Qualified', 'Meeting Scheduled', 'Demo Completed', 'Proposal Sent', 'Negotiation', 'Closed Won', 'Closed Lost']
+    if (dealStage && !validStages.includes(dealStage)) {
+      errors.push({
+        row: row.__rowIndex || 0,
+        field: 'deal_stage',
+        message: `Deal Stage must be one of: ${validStages.join(', ')}`,
+        level: 'warning',
+      })
+    }
+  }
   
   return errors
 }
