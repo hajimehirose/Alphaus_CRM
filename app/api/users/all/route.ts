@@ -27,7 +27,7 @@ export async function GET() {
 
     // Get all authenticated users
     const serviceClient = await createServiceClient()
-    const { data: { users: authUsers }, error: usersError } = await serviceClient.auth.admin.listUsers()
+    const { data: authUsersData, error: usersError } = await serviceClient.auth.admin.listUsers()
 
     if (usersError) {
       return new NextResponse(
@@ -35,6 +35,8 @@ export async function GET() {
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       )
     }
+
+    const authUsers = authUsersData?.users || []
 
     // Get all role assignments
     const { data: userRoles, error: rolesError } = await serviceClient
@@ -56,7 +58,7 @@ export async function GET() {
     })
 
     // Merge authenticated users with roles
-    const mergedUsers = authUsers.users.map(authUser => {
+    const mergedUsers = authUsers.map(authUser => {
       const roleData = roleMap.get(authUser.id)
       return {
         id: authUser.id,

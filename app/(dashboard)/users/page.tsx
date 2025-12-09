@@ -486,6 +486,7 @@ export default function UsersPage() {
                       />
                     </div>
                     {user.avatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={user.avatar}
                         alt={user.name}

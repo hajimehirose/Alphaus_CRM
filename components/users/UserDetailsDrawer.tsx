@@ -42,6 +42,7 @@ export default function UserDetailsDrawer({ open, onOpenChange, user }: UserDeta
     if (open && user) {
       loadPermissions()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, user])
 
   const loadPermissions = async () => {
@@ -78,6 +79,7 @@ export default function UserDetailsDrawer({ open, onOpenChange, user }: UserDeta
           <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
             <div className="flex items-center gap-3 pb-3 border-b">
               {user.avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={user.avatar}
                   alt={user.name}
