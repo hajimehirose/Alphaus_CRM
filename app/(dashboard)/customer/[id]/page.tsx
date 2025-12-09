@@ -8,12 +8,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ArrowLeft, Edit, Trash2, Plus, ExternalLink, Save, X, Loader2 } from 'lucide-react'
 import type { Customer, Note, Attachment, ActivityLog } from '@/types/database'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
-import { formatFileSize, getFileIcon } from '@/lib/file-utils'
 import CustomerForm from '@/components/customers/CustomerForm'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import FileUpload from '@/components/customers/FileUpload'
-import MentionInput from '@/components/customers/MentionInput'
+import { Input } from '@/components/ui/input'
 
 const STORAGE_ICONS: Record<string, string> = {
   'Google Drive': '📁',
@@ -21,6 +19,19 @@ const STORAGE_ICONS: Record<string, string> = {
   'OneDrive': '☁️',
   'Box': '📋',
   'Other': '📎',
+}
+
+// Helper function to validate Google Drive URL
+const isValidGoogleDriveUrl = (url: string): boolean => {
+  return /^https?:\/\/(drive\.google\.com|docs\.google\.com)/.test(url)
+}
+
+// Helper function to derive title from Google Drive URL if needed
+const deriveTitleFromUrl = (url: string): string => {
+  if (!isValidGoogleDriveUrl(url)) return ''
+  // Try to extract filename from URL if possible
+  const match = url.match(/[\/\?]([^\/\?]+)$/)
+  return match ? decodeURIComponent(match[1]) : 'Google Drive Link'
 }
 
 interface User {
@@ -54,7 +65,7 @@ export default function CustomerDetailPage() {
     title: '',
     description: '',
     url: '',
-    storage_type: 'Other',
+    storage_type: 'Google Drive',
   })
 
   // Load current user
@@ -296,6 +307,15 @@ export default function CustomerDetailPage() {
       return
     }
 
+    if (!isValidGoogleDriveUrl(newAttachment.url)) {
+      toast({
+        variant: 'warning',
+        title: 'Invalid URL',
+        description: 'Please enter a valid Google Drive URL',
+      })
+      return
+    }
+
     try {
       const res = await fetch(`/api/customers/${customerId}/attachments`, {
         method: 'POST',
@@ -308,7 +328,7 @@ export default function CustomerDetailPage() {
           title: 'Success',
           description: 'Attachment added successfully',
         })
-        setNewAttachment({ title: '', description: '', url: '', storage_type: 'Other' })
+        setNewAttachment({ title: '', description: '', url: '', storage_type: 'Google Drive' })
         loadAttachments()
         loadActivities()
       } else {
@@ -580,10 +600,10 @@ export default function CustomerDetailPage() {
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Company Site</label>
                 {isEditing ? (
-                  <input
+                  <Input
                     type="text"
-                    className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={editedFields.company_site !== undefined ? editedFields.company_site : customer.company_site || ''}
+                    className="w-full mt-1"
+                    value={editedFields.company_site !== undefined ? (editedFields.company_site || '') : (customer.company_site || '')}
                     onChange={(e) => handleFieldChange('company_site', e.target.value)}
                   />
                 ) : (
@@ -593,10 +613,10 @@ export default function CustomerDetailPage() {
               <div>
                 <label className="text-sm font-medium text-muted-foreground">AWS Tier</label>
                 {isEditing ? (
-                  <input
+                  <Input
                     type="text"
-                    className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={editedFields.tier !== undefined ? editedFields.tier : customer.tier || ''}
+                    className="w-full mt-1"
+                    value={editedFields.tier !== undefined ? (editedFields.tier || '') : (customer.tier || '')}
                     onChange={(e) => handleFieldChange('tier', e.target.value)}
                   />
                 ) : (
@@ -606,10 +626,10 @@ export default function CustomerDetailPage() {
               <div>
                 <label className="text-sm font-medium text-muted-foreground">PIC</label>
                 {isEditing ? (
-                  <input
+                  <Input
                     type="text"
-                    className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={editedFields.pic !== undefined ? editedFields.pic : customer.pic || ''}
+                    className="w-full mt-1"
+                    value={editedFields.pic !== undefined ? (editedFields.pic || '') : (customer.pic || '')}
                     onChange={(e) => handleFieldChange('pic', e.target.value)}
                   />
                 ) : (
@@ -619,10 +639,10 @@ export default function CustomerDetailPage() {
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Alphaus Rep</label>
                 {isEditing ? (
-                  <input
+                  <Input
                     type="text"
-                    className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={editedFields.alphaus_rep !== undefined ? editedFields.alphaus_rep : customer.alphaus_rep || ''}
+                    className="w-full mt-1"
+                    value={editedFields.alphaus_rep !== undefined ? (editedFields.alphaus_rep || '') : (customer.alphaus_rep || '')}
                     onChange={(e) => handleFieldChange('alphaus_rep', e.target.value)}
                   />
                 ) : (
@@ -639,11 +659,11 @@ export default function CustomerDetailPage() {
               <CardTitle>Add Note</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <MentionInput
+              <textarea
                 value={newNote}
-                onChange={setNewNote}
+                onChange={(e) => setNewNote(e.target.value)}
                 placeholder="Write a note... Use @ to mention team members"
-                users={users}
+                className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               />
               <Button onClick={handleAddNote}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -671,11 +691,11 @@ export default function CustomerDetailPage() {
                       </div>
                       {editingNoteId === note.id ? (
                         <div className="space-y-2">
-                          <MentionInput
+                          <textarea
                             value={editedNoteContent}
-                            onChange={setEditedNoteContent}
+                            onChange={(e) => setEditedNoteContent(e.target.value)}
                             placeholder="Edit note..."
-                            users={users}
+                            className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                           />
                           <div className="flex gap-2">
                             <Button size="sm" onClick={() => handleSaveNote(note.id)}>
@@ -722,76 +742,70 @@ export default function CustomerDetailPage() {
         </TabsContent>
 
         <TabsContent value="attachments" className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Upload File</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <FileUpload customerId={customerId} onUploadSuccess={loadAttachments} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Add Attachment Link</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium">Title *</label>
-                    <input
-                      className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={newAttachment.title}
-                      onChange={(e) => setNewAttachment({ ...newAttachment, title: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Storage Type</label>
-                    <select
-                      className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={newAttachment.storage_type}
-                      onChange={(e) => setNewAttachment({ ...newAttachment, storage_type: e.target.value })}
-                    >
-                      {Object.keys(STORAGE_ICONS).map(type => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">URL *</label>
-                  <input
-                    type="url"
-                    className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={newAttachment.url}
-                    onChange={(e) => setNewAttachment({ ...newAttachment, url: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Description</label>
-                  <textarea
-                    className="w-full mt-1 min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={newAttachment.description}
-                    onChange={(e) => setNewAttachment({ ...newAttachment, description: e.target.value })}
-                  />
-                </div>
-                <Button onClick={handleAddAttachment}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Attachment
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Add Google Drive Link</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Title *</label>
+                <Input
+                  className="w-full mt-1"
+                  value={newAttachment.title}
+                  onChange={(e) => setNewAttachment({ ...newAttachment, title: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Google Drive URL *</label>
+                <Input
+                  type="url"
+                  className="w-full mt-1"
+                  value={newAttachment.url}
+                  onChange={(e) => {
+                    const url = e.target.value
+                    setNewAttachment({ 
+                      ...newAttachment, 
+                      url,
+                      storage_type: isValidGoogleDriveUrl(url) ? 'Google Drive' : 'Other'
+                    })
+                    // Auto-fill title if empty and valid Google Drive URL
+                    if (!newAttachment.title && isValidGoogleDriveUrl(url)) {
+                      const derivedTitle = deriveTitleFromUrl(url)
+                      if (derivedTitle) {
+                        setNewAttachment(prev => ({ ...prev, title: derivedTitle }))
+                      }
+                    }
+                  }}
+                  placeholder="https://drive.google.com/..."
+                />
+                {newAttachment.url && !isValidGoogleDriveUrl(newAttachment.url) && (
+                  <p className="text-sm text-destructive mt-1">
+                    Please enter a valid Google Drive URL
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="text-sm font-medium">Description</label>
+                <textarea
+                  className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mt-1"
+                  value={newAttachment.description}
+                  onChange={(e) => setNewAttachment({ ...newAttachment, description: e.target.value })}
+                />
+              </div>
+              <Button 
+                onClick={handleAddAttachment}
+                disabled={!newAttachment.title || !newAttachment.url || !isValidGoogleDriveUrl(newAttachment.url)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Attachment
+              </Button>
+            </CardContent>
+          </Card>
 
           <div className="space-y-4">
             {attachments.map(attachment => {
-              const isFileUpload = attachment.is_file_upload
-              const icon = isFileUpload 
-                ? getFileIcon(attachment.file_type || null, attachment.filename || null)
-                : STORAGE_ICONS[attachment.storage_type] || '📎'
-              const displayName = attachment.filename || attachment.title
-              const size = attachment.file_size ? formatFileSize(attachment.file_size) : null
+              const icon = STORAGE_ICONS[attachment.storage_type] || '📎'
+              const displayName = attachment.title
               
               return (
                 <Card key={attachment.id}>
@@ -806,20 +820,6 @@ export default function CustomerDetailPage() {
                               <span>{attachment.user_name}</span>
                               <span>•</span>
                               <span>{formatDateTime(attachment.created_at)}</span>
-                              {size && (
-                                <>
-                                  <span>•</span>
-                                  <span>{size}</span>
-                                </>
-                              )}
-                              {attachment.file_type && (
-                                <>
-                                  <span>•</span>
-                                  <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
-                                    {attachment.file_type.split('/')[1]?.toUpperCase() || attachment.file_type}
-                                  </span>
-                                </>
-                              )}
                             </div>
                           </div>
                         </div>
@@ -833,16 +833,18 @@ export default function CustomerDetailPage() {
                           className="text-sm text-primary hover:underline inline-flex items-center gap-1"
                         >
                           <ExternalLink className="h-3 w-3" />
-                          {isFileUpload ? 'Download File' : 'Open Link'}
+                          Open in Google Drive
                         </a>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteAttachment(attachment.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
+                      {(currentUser?.id === attachment.user_id || currentUser?.id) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteAttachment(attachment.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
