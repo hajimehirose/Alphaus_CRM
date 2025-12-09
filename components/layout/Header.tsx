@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Search, Bell, LogOut, Users, Activity, Upload, Home } from 'lucide-react'
 import UserMenu from './UserMenu'
+import { APP_VERSION } from '@/lib/version'
 
 interface HeaderProps {
   onSearch?: (query: string) => void
@@ -82,6 +83,9 @@ export default function Header({ onSearch, searchQuery = '' }: HeaderProps) {
               />
             </div>
           )}
+          <div className="text-xs text-muted-foreground hidden md:block">
+            v{APP_VERSION}
+          </div>
           <Button variant="ghost" size="icon">
             <Bell className="h-5 w-5" />
           </Button>
