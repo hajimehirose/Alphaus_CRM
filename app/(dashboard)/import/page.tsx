@@ -135,7 +135,8 @@ export default function ImportPage() {
     if (nameEnField) {
       const names = new Map<string, number[]>()
       allRows.forEach((row, idx) => {
-        const name = row[nameEnField]?.trim().toLowerCase()
+        const nameValue = row[nameEnField]
+        const name = typeof nameValue === 'string' ? nameValue.trim().toLowerCase() : String(nameValue || '').trim().toLowerCase()
         if (name) {
           if (!names.has(name)) {
             names.set(name, [])
