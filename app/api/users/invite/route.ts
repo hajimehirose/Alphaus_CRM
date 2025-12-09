@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     const serviceClient = await createServiceClient()
 
     // Check if user exists in auth.users
-    const { data: { users: authUsers }, error: usersError } = await serviceClient.auth.admin.listUsers()
+    const { data: authUsersData, error: usersError } = await serviceClient.auth.admin.listUsers()
     if (usersError) {
       return new NextResponse(
         JSON.stringify({ error: 'Failed to check user existence', details: usersError.message }),
@@ -65,7 +65,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const existingUser = authUsers.users.find(u => u.email?.toLowerCase() === email.toLowerCase())
+    const authUsers = authUsersData?.users || []
+    const existingUser = authUsers.find(u => u.email?.toLowerCase() === email.toLowerCase())
 
     if (!existingUser) {
       // User doesn't exist yet - they need to log in first
