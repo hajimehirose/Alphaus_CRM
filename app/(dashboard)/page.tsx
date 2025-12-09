@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Plus, LayoutGrid, Table2, Columns, Edit2, Eye, Download, Settings2, Filter, Trash2 as TrashIcon } from 'lucide-react'
+import { Plus, Table2, Columns, Edit2, Eye, Download, Settings2, Filter, Trash2 as TrashIcon } from 'lucide-react'
 import ColumnConfigDialog from '@/components/customers/ColumnConfigDialog'
 import AdvancedFilters, { type FilterCondition } from '@/components/customers/AdvancedFilters'
 import { useUserSettings, type TableDensity } from '@/hooks/use-user-settings'
@@ -15,11 +15,10 @@ import type { Customer } from '@/types/database'
 import CustomerForm from '@/components/customers/CustomerForm'
 import KanbanBoard from '@/components/customers/KanbanBoard'
 import CustomerTable from '@/components/customers/CustomerTable'
-import CustomerGrid from '@/components/customers/CustomerGrid'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DEAL_STAGES } from '@/lib/constants'
 
-type ViewMode = 'kanban' | 'table' | 'grid'
+type ViewMode = 'kanban' | 'table'
 type EditMode = 'view' | 'edit'
 
 export default function CustomersPage() {
@@ -380,14 +379,6 @@ export default function CustomersPage() {
             <Table2 className="h-4 w-4 mr-2" />
             Table
           </Button>
-          <Button
-            variant={viewMode === 'grid' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('grid')}
-          >
-            <LayoutGrid className="h-4 w-4 mr-2" />
-            Grid
-          </Button>
           {viewMode === 'table' && (
             <>
               <div className="h-6 w-px bg-gray-300 mx-2" />
@@ -439,7 +430,7 @@ export default function CustomersPage() {
           onDelete={handleDeleteCustomer}
           onNavigate={(id) => router.push(`/customer/${id}`)}
         />
-        ) : viewMode === 'table' ? (
+        ) : (
           <CustomerTable
             customers={customers}
             editMode={editMode === 'edit'}
@@ -449,13 +440,6 @@ export default function CustomersPage() {
             selectedIds={selectedCustomerIds}
             onSelectionChange={setSelectedCustomerIds}
           />
-      ) : (
-        <CustomerGrid
-          customers={customers}
-          onUpdate={handleUpdateCustomer}
-          onDelete={handleDeleteCustomer}
-          onNavigate={(id) => router.push(`/customer/${id}`)}
-        />
       )}
 
       {/* Create Customer Dialog */}
