@@ -16,6 +16,8 @@ interface CustomerTableProps {
   onUpdate: (id: number, updates: Partial<Customer>) => void
   onDelete: (id: number) => void
   onNavigate: (id: number) => void
+  selectedIds?: Set<number>
+  onSelectionChange?: (ids: Set<number>) => void
 }
 
 type SortField = keyof Customer | null
