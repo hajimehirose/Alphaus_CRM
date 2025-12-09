@@ -7,14 +7,6 @@ const nextConfig = {
   experimental: {
     missingSuspenseWithCSRBailout: false,
   },
-  async rewrites() {
-    return [
-      {
-        source: '/favicon.ico',
-        destination: '/api/favicon.ico',
-      },
-    ]
-  },
 }
 
 module.exports = nextConfig

@@ -1,16 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Edit, Trash2, Plus, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Plus, ExternalLink, Save, X, Loader2 } from 'lucide-react'
 import type { Customer, Note, Attachment, ActivityLog } from '@/types/database'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
+import { formatFileSize, getFileIcon } from '@/lib/file-utils'
 import CustomerForm from '@/components/customers/CustomerForm'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
+import FileUpload from '@/components/customers/FileUpload'
+import MentionInput from '@/components/customers/MentionInput'
 
 const STORAGE_ICONS: Record<string, string> = {
   'Google Drive': '📁',
@@ -18,6 +21,12 @@ const STORAGE_ICONS: Record<string, string> = {
   'OneDrive': '☁️',
   'Box': '📋',
   'Other': '📎',
+}
+
+interface User {
+  id: string
+  email: string
+  name: string
 }
 
 export default function CustomerDetailPage() {
@@ -30,15 +39,55 @@ export default function CustomerDetailPage() {
   const [notes, setNotes] = useState<Note[]>([])
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [activities, setActivities] = useState<ActivityLog[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [showEditDialog, setShowEditDialog] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedFields, setEditedFields] = useState<Partial<Customer>>({})
+  const [saving, setSaving] = useState(false)
   const [newNote, setNewNote] = useState('')
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null)
+  const [editedNoteContent, setEditedNoteContent] = useState('')
+  const [activeTab, setActiveTab] = useState('overview')
+  const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null)
   const [newAttachment, setNewAttachment] = useState({
     title: '',
     description: '',
     url: '',
     storage_type: 'Other',
   })
+
+  // Load current user
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(res => res.json())
+      .then(data => {
+        if (data.id) {
+          setCurrentUser({ id: data.id, email: data.email })
+        }
+      })
+      .catch(console.error)
+  }, [])
+
+  // Load users for mentions
+  useEffect(() => {
+    fetch('/api/users/list')
+      .then(res => res.json())
+      .then(data => {
+        if (data.users) {
+          setUsers(data.users)
+        }
+      })
+      .catch(console.error)
+  }, [])
+
+  // Handle URL hash for tabs
+  useEffect(() => {
+    const hash = window.location.hash.slice(1)
+    if (hash && ['overview', 'notes', 'attachments', 'activities'].includes(hash)) {
+      setActiveTab(hash)
+    }
+  }, [])
 
   useEffect(() => {
     loadCustomer()
@@ -47,6 +96,12 @@ export default function CustomerDetailPage() {
     loadActivities()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId])
+
+  // Update URL hash when tab changes
+  const handleTabChange = (value: string) => {
+    setActiveTab(value)
+    window.location.hash = value
+  }
 
   const loadCustomer = async () => {
     try {
@@ -99,6 +154,24 @@ export default function CustomerDetailPage() {
     }
   }
 
+  // Parse mentions from note content
+  const parseMentions = (content: string): string[] => {
+    const mentionRegex = /@(\w+)/g
+    const mentions: string[] = []
+    let match
+    while ((match = mentionRegex.exec(content)) !== null) {
+      const mentionedName = match[1]
+      const user = users.find(u => 
+        u.name.toLowerCase() === mentionedName.toLowerCase() ||
+        u.email.split('@')[0].toLowerCase() === mentionedName.toLowerCase()
+      )
+      if (user) {
+        mentions.push(user.id)
+      }
+    }
+    return mentions
+  }
+
   const handleAddNote = async () => {
     if (!newNote.trim()) {
       toast({
@@ -110,10 +183,11 @@ export default function CustomerDetailPage() {
     }
 
     try {
+      const mentions = parseMentions(newNote)
       const res = await fetch(`/api/customers/${customerId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newNote }),
+        body: JSON.stringify({ content: newNote, mentions }),
       })
       if (res.ok) {
         toast({
@@ -136,6 +210,80 @@ export default function CustomerDetailPage() {
         description: error.message || 'Failed to add note',
       })
     }
+  }
+
+  const handleEditNote = (note: Note) => {
+    setEditingNoteId(note.id)
+    setEditedNoteContent(note.content)
+  }
+
+  const handleCancelEditNote = () => {
+    setEditingNoteId(null)
+    setEditedNoteContent('')
+  }
+
+  const handleSaveNote = async (noteId: number) => {
+    if (!editedNoteContent.trim()) {
+      toast({
+        variant: 'warning',
+        title: 'Invalid Input',
+        description: 'Note cannot be empty',
+      })
+      return
+    }
+
+    try {
+      const mentions = parseMentions(editedNoteContent)
+      const res = await fetch(`/api/notes/${noteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editedNoteContent, mentions }),
+      })
+      if (res.ok) {
+        toast({
+          variant: 'success',
+          title: 'Success',
+          description: 'Note updated successfully',
+        })
+        setEditingNoteId(null)
+        setEditedNoteContent('')
+        loadNotes()
+        loadActivities()
+      } else {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to update note')
+      }
+    } catch (error: any) {
+      console.error('Error updating note:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to update note',
+      })
+    }
+  }
+
+  // Render note content with highlighted mentions
+  const renderNoteContent = (content: string) => {
+    if (!content) return ''
+    const parts = content.split(/(@\w+)/g)
+    return parts.map((part, index) => {
+      if (part.startsWith('@')) {
+        const username = part.substring(1)
+        const user = users.find(u => 
+          u.name.toLowerCase() === username.toLowerCase() ||
+          u.email.split('@')[0].toLowerCase() === username.toLowerCase()
+        )
+        if (user) {
+          return (
+            <span key={index} className="bg-blue-100 dark:bg-blue-900/30 px-1 rounded font-medium">
+              {part}
+            </span>
+          )
+        }
+      }
+      return <span key={index}>{part}</span>
+    })
   }
 
   const handleAddAttachment = async () => {
@@ -245,6 +393,8 @@ export default function CustomerDetailPage() {
           description: 'Customer updated successfully',
         })
         setShowEditDialog(false)
+        setIsEditing(false)
+        setEditedFields({})
         loadCustomer()
         loadActivities()
       } else {
@@ -260,6 +410,43 @@ export default function CustomerDetailPage() {
       })
     }
   }
+
+  const handleInlineSave = async () => {
+    if (Object.keys(editedFields).length === 0) {
+      setIsEditing(false)
+      return
+    }
+
+    setSaving(true)
+    try {
+      await handleUpdateCustomer(editedFields)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleInlineCancel = () => {
+    setIsEditing(false)
+    setEditedFields({})
+  }
+
+  const handleFieldChange = (field: keyof Customer, value: any) => {
+    setEditedFields(prev => ({ ...prev, [field]: value }))
+  }
+
+  // Calculate quick stats
+  const quickStats = useMemo(() => {
+    if (!customer) return null
+    const totalInteractions = notes.length + activities.length
+    const createdDate = new Date(customer.created_at)
+    const daysSinceCreation = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
+    
+    return {
+      totalInteractions,
+      daysSinceCreation,
+      weightedValue: customer.deal_value_usd * (customer.deal_probability / 100),
+    }
+  }, [customer, notes.length, activities.length])
 
   if (loading) {
     return <div className="text-center py-12">Loading...</div>
@@ -286,7 +473,7 @@ export default function CustomerDetailPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="notes">Notes ({notes.length})</TabsTrigger>
@@ -295,6 +482,35 @@ export default function CustomerDetailPage() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            {isEditing ? (
+              <div className="flex gap-2">
+                <Button onClick={handleInlineSave} disabled={saving} size="sm">
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save
+                    </>
+                  )}
+                </Button>
+                <Button variant="outline" onClick={handleInlineCancel} disabled={saving} size="sm">
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button variant="outline" onClick={() => setIsEditing(true)} size="sm">
+                <Edit className="h-4 w-4 mr-2" />
+                Edit
+              </Button>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card>
               <CardHeader>
@@ -310,6 +526,11 @@ export default function CustomerDetailPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold">{formatCurrency(customer.deal_value_usd, 'USD')}</p>
+                {quickStats && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Weighted: {formatCurrency(quickStats.weightedValue, 'USD')}
+                  </p>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -328,6 +549,27 @@ export default function CustomerDetailPage() {
                 <p className="text-2xl font-bold">{customer.priority || '-'}</p>
               </CardContent>
             </Card>
+            {quickStats && (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium">Interactions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">{quickStats.totalInteractions}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium">Relationship</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-2xl font-bold">{quickStats.daysSinceCreation}</p>
+                    <p className="text-xs text-muted-foreground mt-1">days</p>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </div>
 
           <Card>
@@ -337,19 +579,55 @@ export default function CustomerDetailPage() {
             <CardContent className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Company Site</label>
-                <p>{customer.company_site || '-'}</p>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={editedFields.company_site !== undefined ? editedFields.company_site : customer.company_site || ''}
+                    onChange={(e) => handleFieldChange('company_site', e.target.value)}
+                  />
+                ) : (
+                  <p>{customer.company_site || '-'}</p>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">AWS Tier</label>
-                <p>{customer.tier || '-'}</p>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={editedFields.tier !== undefined ? editedFields.tier : customer.tier || ''}
+                    onChange={(e) => handleFieldChange('tier', e.target.value)}
+                  />
+                ) : (
+                  <p>{customer.tier || '-'}</p>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">PIC</label>
-                <p>{customer.pic || '-'}</p>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={editedFields.pic !== undefined ? editedFields.pic : customer.pic || ''}
+                    onChange={(e) => handleFieldChange('pic', e.target.value)}
+                  />
+                ) : (
+                  <p>{customer.pic || '-'}</p>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Alphaus Rep</label>
-                <p>{customer.alphaus_rep || '-'}</p>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={editedFields.alphaus_rep !== undefined ? editedFields.alphaus_rep : customer.alphaus_rep || ''}
+                    onChange={(e) => handleFieldChange('alphaus_rep', e.target.value)}
+                  />
+                ) : (
+                  <p>{customer.alphaus_rep || '-'}</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -361,11 +639,11 @@ export default function CustomerDetailPage() {
               <CardTitle>Add Note</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <textarea
-                className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                placeholder="Write a note..."
+              <MentionInput
                 value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
+                onChange={setNewNote}
+                placeholder="Write a note... Use @ to mention team members"
+                users={users}
               />
               <Button onClick={handleAddNote}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -386,18 +664,56 @@ export default function CustomerDetailPage() {
                           {formatDateTime(note.created_at)}
                         </span>
                         {note.edited > 0 && (
-                          <span className="text-xs text-muted-foreground">(edited)</span>
+                          <span className="text-xs text-muted-foreground">
+                            (edited {formatDateTime(note.updated_at)})
+                          </span>
                         )}
                       </div>
-                      <p className="whitespace-pre-wrap">{note.content}</p>
+                      {editingNoteId === note.id ? (
+                        <div className="space-y-2">
+                          <MentionInput
+                            value={editedNoteContent}
+                            onChange={setEditedNoteContent}
+                            placeholder="Edit note..."
+                            users={users}
+                          />
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={() => handleSaveNote(note.id)}>
+                              <Save className="h-4 w-4 mr-2" />
+                              Save
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={handleCancelEditNote}>
+                              <X className="h-4 w-4 mr-2" />
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-wrap">{renderNoteContent(note.content)}</p>
+                      )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteNote(note.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
+                    {editingNoteId !== note.id && (
+                      <div className="flex gap-1">
+                        {currentUser?.id === note.user_id && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditNote(note)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {(currentUser?.id === note.user_id || currentUser?.id) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteNote(note.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -406,96 +722,132 @@ export default function CustomerDetailPage() {
         </TabsContent>
 
         <TabsContent value="attachments" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Add Attachment Link</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Upload File</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <FileUpload customerId={customerId} onUploadSuccess={loadAttachments} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Add Attachment Link</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Title *</label>
+                    <input
+                      className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={newAttachment.title}
+                      onChange={(e) => setNewAttachment({ ...newAttachment, title: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Storage Type</label>
+                    <select
+                      className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={newAttachment.storage_type}
+                      onChange={(e) => setNewAttachment({ ...newAttachment, storage_type: e.target.value })}
+                    >
+                      {Object.keys(STORAGE_ICONS).map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
                 <div>
-                  <label className="text-sm font-medium">Title *</label>
+                  <label className="text-sm font-medium">URL *</label>
                   <input
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={newAttachment.title}
-                    onChange={(e) => setNewAttachment({ ...newAttachment, title: e.target.value })}
+                    type="url"
+                    className="w-full mt-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={newAttachment.url}
+                    onChange={(e) => setNewAttachment({ ...newAttachment, url: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Storage Type</label>
-                  <select
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={newAttachment.storage_type}
-                    onChange={(e) => setNewAttachment({ ...newAttachment, storage_type: e.target.value })}
-                  >
-                    {Object.keys(STORAGE_ICONS).map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
+                  <label className="text-sm font-medium">Description</label>
+                  <textarea
+                    className="w-full mt-1 min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={newAttachment.description}
+                    onChange={(e) => setNewAttachment({ ...newAttachment, description: e.target.value })}
+                  />
                 </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium">URL *</label>
-                <input
-                  type="url"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={newAttachment.url}
-                  onChange={(e) => setNewAttachment({ ...newAttachment, url: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Description</label>
-                <textarea
-                  className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={newAttachment.description}
-                  onChange={(e) => setNewAttachment({ ...newAttachment, description: e.target.value })}
-                />
-              </div>
-              <Button onClick={handleAddAttachment}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Attachment
-              </Button>
-            </CardContent>
-          </Card>
+                <Button onClick={handleAddAttachment}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Attachment
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
 
           <div className="space-y-4">
-            {attachments.map(attachment => (
-              <Card key={attachment.id}>
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-2xl">{STORAGE_ICONS[attachment.storage_type] || '📎'}</span>
-                        <div>
-                          <h4 className="font-medium">{attachment.title}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {attachment.storage_type} • {formatDateTime(attachment.created_at)}
-                          </p>
+            {attachments.map(attachment => {
+              const isFileUpload = attachment.is_file_upload
+              const icon = isFileUpload 
+                ? getFileIcon(attachment.file_type || null, attachment.filename || null)
+                : STORAGE_ICONS[attachment.storage_type] || '📎'
+              const displayName = attachment.filename || attachment.title
+              const size = attachment.file_size ? formatFileSize(attachment.file_size) : null
+              
+              return (
+                <Card key={attachment.id}>
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="text-2xl">{icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium truncate">{displayName}</h4>
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                              <span>{attachment.user_name}</span>
+                              <span>•</span>
+                              <span>{formatDateTime(attachment.created_at)}</span>
+                              {size && (
+                                <>
+                                  <span>•</span>
+                                  <span>{size}</span>
+                                </>
+                              )}
+                              {attachment.file_type && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                                    {attachment.file_type.split('/')[1]?.toUpperCase() || attachment.file_type}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
                         </div>
+                        {attachment.description && (
+                          <p className="text-sm text-muted-foreground mb-2">{attachment.description}</p>
+                        )}
+                        <a
+                          href={attachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          {isFileUpload ? 'Download File' : 'Open Link'}
+                        </a>
                       </div>
-                      {attachment.description && (
-                        <p className="text-sm text-muted-foreground mb-2">{attachment.description}</p>
-                      )}
-                      <a
-                        href={attachment.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-primary hover:underline flex items-center gap-1"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteAttachment(attachment.id)}
                       >
-                        <ExternalLink className="h-3 w-3" />
-                        Open Link
-                      </a>
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteAttachment(attachment.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         </TabsContent>
 
