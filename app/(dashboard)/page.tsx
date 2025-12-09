@@ -7,18 +7,16 @@ export const dynamic = 'force-dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Plus, Table2, Columns, Edit2, Eye, Download, Settings2, Filter, Trash2 as TrashIcon } from 'lucide-react'
+import { Plus, Columns, Edit2, Eye, Download, Settings2 } from 'lucide-react'
 import ColumnConfigDialog from '@/components/customers/ColumnConfigDialog'
 import AdvancedFilters, { type FilterCondition } from '@/components/customers/AdvancedFilters'
 import { useUserSettings, type TableDensity } from '@/hooks/use-user-settings'
 import type { Customer } from '@/types/database'
 import CustomerForm from '@/components/customers/CustomerForm'
-import KanbanBoard from '@/components/customers/KanbanBoard'
 import CustomerTable from '@/components/customers/CustomerTable'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { DEAL_STAGES } from '@/lib/constants'
+import Link from 'next/link'
 
-type ViewMode = 'kanban' | 'table'
 type EditMode = 'view' | 'edit'
 
 export default function CustomersPage() {
@@ -28,7 +26,6 @@ export default function CustomersPage() {
   const { settings, saveSetting } = useUserSettings()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<ViewMode>('kanban')
   const [editMode, setEditMode] = useState<EditMode>('view')
   const searchQuery = searchParams.get('search') || ''
   const [filterPriority, setFilterPriority] = useState<string | null>(null)
@@ -199,20 +196,6 @@ export default function CustomersPage() {
     }
   }
 
-  // Calculate pipeline metrics
-  const pipelineMetrics = {
-    totalValue: customers.reduce((sum, c) => sum + (c.deal_value_usd || 0), 0),
-    weightedValue: customers.reduce((sum, c) => sum + (c.deal_value_usd || 0) * (c.deal_probability || 0) / 100, 0),
-    closedWon: customers.filter(c => c.deal_stage === 'Closed Won').length,
-    closedTotal: customers.filter(c => c.deal_stage === 'Closed Won' || c.deal_stage === 'Closed Lost').length,
-    avgDealSize: customers.length > 0 
-      ? customers.reduce((sum, c) => sum + (c.deal_value_usd || 0), 0) / customers.length 
-      : 0,
-  }
-
-  const winRate = pipelineMetrics.closedTotal > 0 
-    ? (pipelineMetrics.closedWon / pipelineMetrics.closedTotal) * 100 
-    : 0
 
   const handleExportCSV = () => {
     try {
@@ -282,9 +265,18 @@ export default function CustomersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Customers</h1>
-          <p className="text-muted-foreground">Manage your customer pipeline</p>
+          <p className="text-muted-foreground">Master customer data view</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            asChild
+          >
+            <Link href="/kanban">
+              <Columns className="h-4 w-4 mr-2" />
+              Kanban View
+            </Link>
+          </Button>
           <Button
             variant="outline"
             onClick={handleExportCSV}
@@ -322,85 +314,26 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Pipeline Metrics */}
-      {viewMode === 'kanban' && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-sm text-muted-foreground">Total Pipeline</div>
-              <div className="text-2xl font-bold">
-                ${pipelineMetrics.totalValue.toLocaleString()}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-sm text-muted-foreground">Weighted Value</div>
-              <div className="text-2xl font-bold">
-                ${pipelineMetrics.weightedValue.toLocaleString()}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-sm text-muted-foreground">Win Rate</div>
-              <div className="text-2xl font-bold">
-                {winRate.toFixed(1)}%
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-sm text-muted-foreground">Avg Deal Size</div>
-              <div className="text-2xl font-bold">
-                ${pipelineMetrics.avgDealSize.toLocaleString()}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* View Mode Toggle */}
+      {/* Table Controls */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button
-            variant={viewMode === 'kanban' ? 'default' : 'outline'}
+            variant="outline"
             size="sm"
-            onClick={() => setViewMode('kanban')}
+            onClick={() => setShowColumnConfig(true)}
           >
-            <Columns className="h-4 w-4 mr-2" />
-            Kanban
+            <Settings2 className="h-4 w-4 mr-2" />
+            Columns
           </Button>
-          <Button
-            variant={viewMode === 'table' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('table')}
+          <select
+            value={density}
+            onChange={(e) => handleDensityChange(e.target.value as TableDensity)}
+            className="px-3 py-1.5 text-sm border rounded-md bg-background"
           >
-            <Table2 className="h-4 w-4 mr-2" />
-            Table
-          </Button>
-          {viewMode === 'table' && (
-            <>
-              <div className="h-6 w-px bg-gray-300 mx-2" />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowColumnConfig(true)}
-              >
-                <Settings2 className="h-4 w-4 mr-2" />
-                Columns
-              </Button>
-              <select
-                value={density}
-                onChange={(e) => handleDensityChange(e.target.value as TableDensity)}
-                className="px-3 py-1.5 text-sm border rounded-md bg-background"
-              >
-                <option value="compact">Compact</option>
-                <option value="comfortable">Comfortable</option>
-                <option value="spacious">Spacious</option>
-              </select>
-            </>
-          )}
+            <option value="compact">Compact</option>
+            <option value="comfortable">Comfortable</option>
+            <option value="spacious">Spacious</option>
+          </select>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -420,26 +353,19 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Customer Views */}
+      {/* Customer Table View */}
       {loading ? (
         <div className="text-center py-12">Loading...</div>
-      ) : viewMode === 'kanban' ? (
-        <KanbanBoard
+      ) : (
+        <CustomerTable
           customers={customers}
+          editMode={editMode === 'edit'}
           onUpdate={handleUpdateCustomer}
           onDelete={handleDeleteCustomer}
           onNavigate={(id) => router.push(`/customer/${id}`)}
+          selectedIds={selectedCustomerIds}
+          onSelectionChange={setSelectedCustomerIds}
         />
-        ) : (
-          <CustomerTable
-            customers={customers}
-            editMode={editMode === 'edit'}
-            onUpdate={handleUpdateCustomer}
-            onDelete={handleDeleteCustomer}
-            onNavigate={(id) => router.push(`/customer/${id}`)}
-            selectedIds={selectedCustomerIds}
-            onSelectionChange={setSelectedCustomerIds}
-          />
       )}
 
       {/* Create Customer Dialog */}
