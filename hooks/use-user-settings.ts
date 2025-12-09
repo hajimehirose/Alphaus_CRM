@@ -9,7 +9,7 @@ export type ColumnConfig = {
   visible: boolean
   locked: boolean
   type: 'text' | 'dropdown' | 'number' | 'url'
-  options?: string[]
+  options?: readonly string[] | string[]
   required: boolean
   order: number
 }
