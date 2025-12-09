@@ -208,7 +208,8 @@ export default function ImportPage() {
         const mapped: any = {}
         Object.entries(mappings).forEach(([csvCol, dbField]) => {
           if (dbField && row[csvCol]) {
-            mapped[dbField] = row[csvCol].trim()
+            const value = row[csvCol]
+            mapped[dbField] = typeof value === 'string' ? value.trim() : String(value)
           }
         })
         return mapped
