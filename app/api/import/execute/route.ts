@@ -151,10 +151,10 @@ export async function POST(request: Request) {
         
         try {
           // Map CSV columns to database fields using mappings
-          const customerData: any = {}
+          const customerData: Record<string, any> = {}
           
           Object.entries(mappings).forEach(([csvColumn, dbField]) => {
-            if (dbField && row[csvColumn] !== undefined && row[csvColumn] !== null && String(row[csvColumn]).trim() !== '') {
+            if (dbField && typeof dbField === 'string' && row[csvColumn] !== undefined && row[csvColumn] !== null && String(row[csvColumn]).trim() !== '') {
               let value: any = String(row[csvColumn]).trim()
               
               // Type conversion based on field type
