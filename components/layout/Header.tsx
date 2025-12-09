@@ -83,8 +83,10 @@ export default function Header({ onSearch, searchQuery = '' }: HeaderProps) {
               />
             </div>
           )}
-          <div className="text-xs text-muted-foreground hidden md:block">
-            v{APP_VERSION}
+          <div className="flex items-center px-2 py-1 rounded-md bg-muted/50 border border-border">
+            <span className="text-xs font-medium text-foreground">
+              v{APP_VERSION}
+            </span>
           </div>
           <Button variant="ghost" size="icon">
             <Bell className="h-5 w-5" />
