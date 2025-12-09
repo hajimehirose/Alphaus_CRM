@@ -63,14 +63,25 @@ export default function CustomersPage() {
       if (searchQuery) params.set('search', searchQuery)
       if (filterPriority) params.set('priority', filterPriority)
 
-      const res = await fetch(`/api/customers?${params.toString()}`)
+      const res = await fetch(`/api/customers?${params.toString()}`, {
+        headers: {
+          'Accept': 'application/json',
+        }
+      })
       
       // Check if response is JSON
       const contentType = res.headers.get('content-type')
       if (!contentType?.includes('application/json')) {
         const text = await res.text()
-        console.error('Non-JSON response:', text.substring(0, 200))
-        throw new Error('Server returned HTML instead of JSON. Check if API route is working correctly.')
+        console.error('Non-JSON response received:', text.substring(0, 500))
+        console.error('Response status:', res.status)
+        console.error('Response headers:', Object.fromEntries(res.headers.entries()))
+        
+        // Try to extract error message from HTML if possible
+        const errorMatch = text.match(/<title>(.*?)<\/title>/i) || text.match(/<h1>(.*?)<\/h1>/i)
+        const errorMsg = errorMatch ? errorMatch[1] : 'Server returned HTML instead of JSON'
+        
+        throw new Error(`${errorMsg}. Status: ${res.status}. Check API route and environment variables.`)
       }
       
       const data = await res.json()

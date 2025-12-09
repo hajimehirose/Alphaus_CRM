@@ -9,17 +9,26 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function GET(request: Request) {
+  // Ensure we always return JSON, even on errors
   try {
     let supabase
     try {
       supabase = await createClient()
     } catch (clientError: any) {
       console.error('Failed to create Supabase client:', clientError)
-      return NextResponse.json({ 
-        error: 'Configuration error',
-        message: clientError.message || 'Failed to initialize database connection. Please check environment variables.',
-        details: 'Check Vercel environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY'
-      }, { status: 500 })
+      return new NextResponse(
+        JSON.stringify({ 
+          error: 'Configuration error',
+          message: clientError.message || 'Failed to initialize database connection. Please check environment variables.',
+          details: 'Check Vercel environment variables: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY'
+        }),
+        { 
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        }
+      )
     }
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -109,18 +118,18 @@ export async function GET(request: Request) {
     console.error('Error in /api/customers GET:', error)
     console.error('Error stack:', error.stack)
     
-    // Ensure we always return JSON, never HTML
+    // Ensure we always return JSON, never HTML - use new NextResponse to guarantee JSON
     const errorMessage = error.message || 'Internal server error'
     const errorDetails = error.message?.includes('Missing') 
       ? 'Please configure Supabase environment variables in Vercel project settings'
       : error.stack?.substring(0, 200)
     
-    return NextResponse.json(
-      { 
+    return new NextResponse(
+      JSON.stringify({ 
         error: errorMessage,
         details: errorDetails,
         type: 'api_error'
-      },
+      }),
       { 
         status: 500,
         headers: {
