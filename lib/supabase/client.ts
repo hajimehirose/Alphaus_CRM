@@ -55,6 +55,43 @@ export function createClient() {
     )
   }
 
+  // Pre-flight check for corrupted Supabase session in localStorage
+  if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    try {
+      const keysToInspect: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && (key.includes('supabase') || key.startsWith('sb-'))) {
+          keysToInspect.push(key)
+        }
+      }
+
+      let corrupted = false
+      for (const key of keysToInspect) {
+        const raw = localStorage.getItem(key)
+        if (!raw) continue
+        try {
+          const parsed = JSON.parse(raw)
+          // If parsed value is a string (instead of object), treat as corrupted
+          if (typeof parsed === 'string') {
+            corrupted = true
+            break
+          }
+        } catch {
+          // JSON parse failed -> corrupted
+          corrupted = true
+          break
+        }
+      }
+
+      if (corrupted) {
+        clearSupabaseStorage()
+      }
+    } catch {
+      // ignore inspection errors
+    }
+  }
+
   // Wrap client creation with error handling for corrupted session data
   try {
     clientInstance = createBrowserClient(supabaseUrl, supabaseAnonKey)
