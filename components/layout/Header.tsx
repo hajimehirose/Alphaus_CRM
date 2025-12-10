@@ -83,8 +83,8 @@ export default function Header({ onSearch, searchQuery = '' }: HeaderProps) {
               />
             </div>
           )}
-          <div className="flex items-center px-2 py-1 rounded-md bg-muted/50 border border-border">
-            <span className="text-xs font-medium text-foreground">
+          <div className="flex items-center px-3 py-1.5 rounded-md bg-primary/10 border border-primary/20">
+            <span className="text-sm font-semibold text-primary">
               v{APP_VERSION}
             </span>
           </div>
