@@ -2,6 +2,11 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  // Allow API routes to pass through immediately - they handle their own auth and return JSON
+  if (request.nextUrl.pathname.startsWith('/api')) {
+    return NextResponse.next()
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -68,12 +73,11 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Protect all routes except login, auth callbacks, and API routes
-  // API routes should return JSON errors, not redirects
+  // Protect all routes except login and auth callbacks
+  // API routes are already handled above
   if (!user && 
       !request.nextUrl.pathname.startsWith('/login') && 
-      !request.nextUrl.pathname.startsWith('/auth') &&
-      !request.nextUrl.pathname.startsWith('/api')) {
+      !request.nextUrl.pathname.startsWith('/auth')) {
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = '/login'
     redirectUrl.searchParams.set('redirect', request.nextUrl.pathname)
